@@ -58,7 +58,7 @@ void kfree_page(void *p)
 
 typedef struct Block
 {
-    usize order; // this field saved for both free and alloc block
+    isize size; // this field saved for both free and alloc block
     ListNode list;
 } Block;
 
@@ -67,22 +67,14 @@ static INLINE Block *block_container_of(ListNode *p)
     return container_of(p, Block, list);
 }
 
-static Block *detach_block(usize order);
-static void merge_block(Block *b);
-
-const usize BLOCK_POWER_BASE = 5, BLOCK_SIZE_LOG2_MAX = 12;
-
-static Block dummy_block[8];
+static Block dummy_block;
 static SpinLock block_lock;
 
 void kinit_block()
 {
     init_spinlock(&block_lock);
-    for (auto order = 0; order < 8; order++)
-    {
-        dummy_block[order].order = order;
-        init_list_node(&dummy_block[order].list);
-    }
+    dummy_block.size = 0;
+    init_list_node(&dummy_block.list);
 }
 
 usize log2ceil(u64 n)
@@ -96,85 +88,75 @@ usize log2ceil(u64 n)
 
 void *kalloc(isize size)
 {
-    auto order = MAX(log2ceil(size + sizeof(Block) - sizeof(ListNode)), BLOCK_POWER_BASE) - BLOCK_POWER_BASE;
+    int align;
+    if ((size & 7) == 0)
+        align = 8;
+    else if ((size & 3) == 0)
+        align = 4;
+    else if ((size & 1) == 0)
+        align = 2;
+    else
+        align = 1;
+
+    size = round_up(MAX(size, (isize)sizeof(ListNode)) + sizeof(Block) - sizeof(ListNode), align);
+
     setup_checker(kalloc);
     acquire_spinlock(kalloc, &block_lock);
-    Block *alloc = detach_block(order);
-    release_spinlock(kalloc, &block_lock);
-    return (void *)&alloc->list;
-}
 
-Block *detach_block(usize order)
-{
-    if (_empty_list(&dummy_block[order].list))
+    Block *alloc = NULL;
+    ListNode *prev = NULL;
+    _for_in_list(list_ptr, &dummy_block.list)
     {
-        if (order < BLOCK_SIZE_LOG2_MAX - BLOCK_POWER_BASE)
+        Block *block = block_container_of(list_ptr);
+        if (block->size >= size)
         {
-            Block *first_block = detach_block(order + 1);
-            Block *second_block = (Block *)((u64)first_block + (1 << (order + BLOCK_POWER_BASE)));
-            first_block->order = second_block->order = order;
-            init_list_node(&first_block->list);
-            init_list_node(&second_block->list);
-            _merge_list(&dummy_block[order].list, &second_block->list);
-            return first_block;
-        }
-        else
-        {
-            Block *block = (Block *)kalloc_page();
-            block->order = order;
-            init_list_node(&block->list);
-            return block;
+            alloc = block;
+            prev = _detach_from_list(&alloc->list);
+            break;
         }
     }
-    else
+    if (!alloc)
     {
-        auto alloc = dummy_block[order].list.next;
-        _detach_from_list(alloc);
-        return block_container_of(alloc);
+        alloc = kalloc_page();
+        alloc->size = PAGE_SIZE;
+        init_list_node(&alloc->list);
+        prev = dummy_block.list.prev;
     }
+
+    if (alloc->size - size >= (isize)sizeof(Block))
+    {
+        Block *rest = (Block *)((void *)alloc + size);
+        rest->size = alloc->size - size;
+        alloc->size = size;
+        init_list_node(&rest->list);
+        _merge_list(prev, &rest->list);
+    }
+
+    release_spinlock(kalloc, &block_lock);
+    return (void *)round_up((u64)&alloc->list, align);
 }
 
 void kfree(void *p)
 {
     Block *block = block_container_of(p);
     init_list_node(&block->list);
+
     setup_checker(kfree);
     acquire_spinlock(kfree, &block_lock);
-    merge_block(block);
+
+    ListNode *prev = &dummy_block.list;
+    _for_in_list(list_ptr, &dummy_block.list)
+    {
+        if ((u64)list_ptr < (u64)p)
+        {
+            prev = list_ptr;
+        }
+        else
+        {
+            break;
+        }
+    }
+    _merge_list(prev, &block->list);
+
     release_spinlock(kfree, &block_lock);
-}
-
-void merge_block(Block *b)
-{
-    auto order = b->order;
-    if (order < BLOCK_SIZE_LOG2_MAX - BLOCK_POWER_BASE)
-    {
-        _for_in_list(list_ptr, &dummy_block[order].list)
-        {
-            Block *a = block_container_of(list_ptr);
-            u64 a_addr = (u64)a, b_addr = (u64)b;
-            if ((a_addr >> (order + BLOCK_POWER_BASE + 1)) == ((b_addr >> (order + BLOCK_POWER_BASE + 1))))
-            {
-                _detach_from_list(list_ptr);
-                Block *block = (a_addr >> (order + BLOCK_POWER_BASE)) & 1 ? b : a;
-                block->order++;
-                init_list_node(&block->list);
-                return merge_block(block);
-            }
-        }
-    }
-    else
-    {
-        int cnt = 0;
-        _for_in_list(list_ptr, &dummy_block[order].list)
-        {
-            cnt++;
-        }
-        if (cnt > 0)
-        {
-            return kfree_page(b);
-        }
-    }
-
-    _merge_list(&dummy_block[order].list, &b->list);
 }
