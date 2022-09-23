@@ -72,18 +72,17 @@ static void merge_block(Block *b);
 
 const usize BLOCK_POWER_BASE = 5, BLOCK_SIZE_LOG2_MAX = 12;
 
-#define NCPU 4
-
-static Block dummy_block[NCPU][8];
+static Block dummy_block[8];
+static SpinLock block_lock;
 
 void kinit_block()
 {
-    for (auto cpu = 0; cpu < NCPU; cpu++)
-        for (auto order = 0; order < 8; order++)
-        {
-            dummy_block[cpu][order].order = order;
-            init_list_node(&dummy_block[cpu][order].list);
-        }
+    init_spinlock(&block_lock);
+    for (auto order = 0; order < 8; order++)
+    {
+        dummy_block[order].order = order;
+        init_list_node(&dummy_block[order].list);
+    }
 }
 
 usize log2ceil(u64 n)
@@ -98,13 +97,16 @@ usize log2ceil(u64 n)
 void *kalloc(isize size)
 {
     auto order = MAX(log2ceil(size + sizeof(Block) - sizeof(ListNode)), BLOCK_POWER_BASE) - BLOCK_POWER_BASE;
+    setup_checker(kalloc);
+    acquire_spinlock(kalloc, &block_lock);
     Block *alloc = detach_block(order);
+    release_spinlock(kalloc, &block_lock);
     return (void *)&alloc->list;
 }
 
 Block *detach_block(usize order)
 {
-    if (_empty_list(&dummy_block[cpuid()][order].list))
+    if (_empty_list(&dummy_block[order].list))
     {
         if (order < BLOCK_SIZE_LOG2_MAX - BLOCK_POWER_BASE)
         {
@@ -113,7 +115,7 @@ Block *detach_block(usize order)
             first_block->order = second_block->order = order;
             init_list_node(&first_block->list);
             init_list_node(&second_block->list);
-            _merge_list(&dummy_block[cpuid()][order].list, &second_block->list);
+            _merge_list(&dummy_block[order].list, &second_block->list);
             return first_block;
         }
         else
@@ -126,7 +128,7 @@ Block *detach_block(usize order)
     }
     else
     {
-        auto alloc = dummy_block[cpuid()][order].list.next;
+        auto alloc = dummy_block[order].list.next;
         _detach_from_list(alloc);
         return block_container_of(alloc);
     }
@@ -136,7 +138,10 @@ void kfree(void *p)
 {
     Block *block = block_container_of(p);
     init_list_node(&block->list);
+    setup_checker(kfree);
+    acquire_spinlock(kfree, &block_lock);
     merge_block(block);
+    release_spinlock(kfree, &block_lock);
 }
 
 void merge_block(Block *b)
@@ -144,7 +149,7 @@ void merge_block(Block *b)
     auto order = b->order;
     if (order < BLOCK_SIZE_LOG2_MAX - BLOCK_POWER_BASE)
     {
-        _for_in_list(list_ptr, &dummy_block[cpuid()][order].list)
+        _for_in_list(list_ptr, &dummy_block[order].list)
         {
             Block *a = block_container_of(list_ptr);
             u64 a_addr = (u64)a, b_addr = (u64)b;
@@ -161,7 +166,7 @@ void merge_block(Block *b)
     else
     {
         int cnt = 0;
-        _for_in_list(list_ptr, &dummy_block[cpuid()][order].list)
+        _for_in_list(list_ptr, &dummy_block[order].list)
         {
             cnt++;
         }
@@ -171,5 +176,5 @@ void merge_block(Block *b)
         }
     }
 
-    _merge_list(&dummy_block[cpuid()][order].list, &b->list);
+    _merge_list(&dummy_block[order].list, &b->list);
 }
