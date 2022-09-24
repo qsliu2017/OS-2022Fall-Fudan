@@ -5,6 +5,7 @@
 static bool boot_secondary_cpus = false;
 
 NO_RETURN void idle_entry();
+NO_RETURN void kernel_entry();
 
 void kernel_init()
 {
@@ -29,5 +30,5 @@ void main()
     }
 
     // enter idle process
-    set_return_addr(idle_entry);
+    set_return_addr(kernel_entry);
 }

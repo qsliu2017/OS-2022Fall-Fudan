@@ -61,6 +61,8 @@ int wait(int *exitcode)
 
 int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
 {
+    entry += 0;
+    arg += 0;
     // TODO
     // 1. set the parent to root_proc if NULL
     if (p->parent == NULL)
