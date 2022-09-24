@@ -14,5 +14,6 @@ struct sched
 struct schinfo
 {
     // TODO: customize your sched info
+    ListNode list;
     
 };
