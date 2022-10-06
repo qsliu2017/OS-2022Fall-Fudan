@@ -18,43 +18,32 @@ define_early_init(alloc_page_cnt)
 
 typedef struct Page
 {
-    ListNode freepage;
+    QueueNode freequeue;
 } Page;
 
-static Page dummy_page;
-static SpinLock page_lock;
+static QueueNode *freepages;
 
 void kinit_page()
 {
-    init_list_node(&dummy_page.freepage);
+    freepages = NULL;
     extern char end[];
     for (u64 p = round_up((u64)end, PAGE_SIZE); p < P2K(PHYSTOP); p += PAGE_SIZE)
-        _insert_into_list(&dummy_page.freepage, &((Page *)p)->freepage);
-
-    init_spinlock(&page_lock);
+    {
+        kfree_page((void *)p);
+    }
 }
 
 void *kalloc_page()
 {
-    setup_checker(kalloc_page);
-    _increment_rc(&alloc_page_cnt);
-    acquire_spinlock(kalloc_page, &page_lock);
-    auto alloc = dummy_page.freepage.prev;
-    if (!_detach_from_list(alloc))
-        alloc = NULL;
-    release_spinlock(kalloc_page, &page_lock);
-    return alloc;
+    auto freepage = container_of(fetch_from_queue(&freepages), Page, freequeue);
+    ASSERT(freepage != NULL);
+    return freepage;
 }
 
 void kfree_page(void *p)
 {
-    setup_checker(kfree_page);
     Page *page = (Page *)p;
-    init_list_node(&page->freepage);
-    _decrement_rc(&alloc_page_cnt);
-    acquire_spinlock(kfree_page, &page_lock);
-    _merge_list(&dummy_page.freepage, &page->freepage);
-    release_spinlock(kfree_page, &page_lock);
+    add_to_queue(&freepages, &page->freequeue);
 }
 
 typedef struct Block
