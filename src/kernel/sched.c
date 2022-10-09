@@ -15,7 +15,7 @@ extern NO_RETURN void idle_entry(u64);
 
 // static SleepLock sched_lock;
 
-extern struct proc* root_proc;
+extern struct proc *root_proc;
 
 static struct proc *running_proc[NCPU];
 static Queue runnable_proc;
@@ -33,6 +33,11 @@ define_init(sched)
         idle_proc[i]->idle = true;
         idle_proc[i]->parent = idle_proc[i];
         start_proc(idle_proc[i], idle_entry, 0);
+        if (i != 0)
+        {
+            running_proc[i] = idle_proc[i];
+            running_proc[i]->state = RUNNING;
+        }
         // queue_push(&runnable_proc, &idle->schinfo.list);
     }
 }

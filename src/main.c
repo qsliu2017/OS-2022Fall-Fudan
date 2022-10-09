@@ -16,20 +16,20 @@ void kernel_init()
     boot_secondary_cpus = true;
 }
 
-
 void main()
 {
     if (cpuid() == 0)
     {
         kernel_init();
+        set_return_addr(kernel_entry);
     }
     else
     {
-        arch_stop_cpu();
-        // while (!boot_secondary_cpus);
-        // arch_dsb_sy();
+        while (!boot_secondary_cpus)
+            ;
+        arch_dsb_sy();
+        set_return_addr(idle_entry);
     }
 
     // enter idle process
-    set_return_addr(kernel_entry);
 }
