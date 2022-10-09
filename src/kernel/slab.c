@@ -7,7 +7,7 @@ static KCache cache_cache;
 
 static void init_sizes_cache();
 
-define_init(cache)
+define_early_init(cache)
 {
   cache_cache.objsize = round_up(sizeof(KCache), 8);
   cache_cache.num = (PAGE_SIZE - sizeof(Slab)) / cache_cache.objsize;

@@ -11,22 +11,30 @@ extern bool panic_flag;
 
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
-static SleepLock sched_lock;
+extern NO_RETURN void idle_entry(u64);
+
+// static SleepLock sched_lock;
+
+extern struct proc* root_proc;
 
 static struct proc *running_proc[NCPU];
-static struct proc *idle[NCPU];
 static Queue runnable_proc;
+static struct proc *idle_proc[NCPU];
 
-define_early_init(sched)
+define_init(sched)
 {
-    init_sem(&sched_lock, 1);
+    // init_sem(&sched_lock, 1);
+    queue_init(&runnable_proc);
+    running_proc[0] = root_proc;
+    root_proc->state = RUNNING;
     for (auto i = 0; i < NCPU; i++)
     {
-        running_proc[i] = NULL;
-        idle[i] = create_proc();
-        idle[i]->idle = true;
+        idle_proc[i] = create_proc();
+        idle_proc[i]->idle = true;
+        idle_proc[i]->parent = idle_proc[i];
+        start_proc(idle_proc[i], idle_entry, 0);
+        // queue_push(&runnable_proc, &idle->schinfo.list);
     }
-    queue_init(&runnable_proc);
 }
 
 struct proc *thisproc()
@@ -44,13 +52,13 @@ void init_schinfo(struct schinfo *p)
 void _acquire_sched_lock()
 {
     // TODO: acquire the sched_lock if need
-    wait_sem(&sched_lock);
+    // wait_sem(&sched_lock);
 }
 
 void _release_sched_lock()
 {
     // TODO: release the sched_lock if need
-    post_sem(&sched_lock);
+    // post_sem(&sched_lock);
 }
 
 bool is_zombie(struct proc *p)
@@ -62,12 +70,12 @@ bool is_zombie(struct proc *p)
     return r;
 }
 
+// if the proc->state is RUNNING/RUNNABLE, do nothing
+// if the proc->state if SLEEPING/UNUSED, set the process state to RUNNABLE and add it to the sched queue
+// else: panic
 bool activate_proc(struct proc *p)
 {
     // TODO
-    // if the proc->state is RUNNING/RUNNABLE, do nothing
-    // if the proc->state if SLEEPING/UNUSED, set the process state to RUNNABLE and add it to the sched queue
-    // else: panic
     switch (p->state)
     {
     case RUNNING:
@@ -76,26 +84,32 @@ bool activate_proc(struct proc *p)
     case SLEEPING:
     case UNUSED:
         p->state = RUNNABLE;
-        queue_lock(&runnable_proc);
-        queue_push(&runnable_proc, &p->schinfo.list);
-        queue_unlock(&runnable_proc);
+        if (!p->idle)
+        {
+            queue_lock(&runnable_proc);
+            queue_push(&runnable_proc, &p->schinfo.list);
+            queue_unlock(&runnable_proc);
+        }
         return true;
     default:
         PANIC();
     }
 }
 
+// update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
 static void update_this_state(enum procstate new_state)
 {
     // TODO: if using simple_sched, you should implement this routinue
-    // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
     auto this = thisproc();
     switch (new_state)
     {
     case RUNNABLE:
-        queue_lock(&runnable_proc);
-        queue_push(&runnable_proc, &this->schinfo.list);
-        queue_unlock(&runnable_proc);
+        if (!this->idle)
+        {
+            queue_lock(&runnable_proc);
+            queue_push(&runnable_proc, &this->schinfo.list);
+            queue_unlock(&runnable_proc);
+        }
         this->state = new_state;
         running_proc[cpuid()] = NULL;
         return;
@@ -116,13 +130,13 @@ static struct proc *pick_next()
 {
     // TODO: if using simple_sched, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
-    struct proc *next = idle[cpuid()];
+    struct proc *next = idle_proc[cpuid()];
     queue_lock(&runnable_proc);
-    if (queue_empty(&runnable_proc))
-        goto ret;
-    next = container_of(queue_front(&runnable_proc), struct proc, schinfo.list);
-    queue_pop(&runnable_proc);
-ret:
+    if (!queue_empty(&runnable_proc))
+    {
+        next = container_of(queue_front(&runnable_proc), struct proc, schinfo.list);
+        queue_pop(&runnable_proc);
+    }
     queue_unlock(&runnable_proc);
     return next;
 }
@@ -143,6 +157,8 @@ static void simple_sched(enum procstate new_state)
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();
+    // printk("CPU %d: switch from %d to %d\n", cpuid(), this->pid, next->pid);
+    // dump_sched();
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
@@ -155,9 +171,36 @@ static void simple_sched(enum procstate new_state)
 
 __attribute__((weak, alias("simple_sched"))) void _sched(enum procstate new_state);
 
+/*
 u64 proc_entry(void (*entry)(u64), u64 arg)
 {
     _release_sched_lock();
     set_return_addr(entry);
     return arg;
+}
+*/
+
+void dump_sched()
+{
+    for (auto i = 0; i < NCPU; i++)
+    {
+        printk("running_proc[%d]:\n\t", i);
+        dump_proc(running_proc[i]);
+    }
+
+    printk("runnable_proc:\n\t");
+    queue_lock(&runnable_proc);
+    if (queue_empty(&runnable_proc))
+    {
+        printk("empty\n\t");
+    }
+    else
+    {
+        dump_proc(container_of(runnable_proc.begin, struct proc, schinfo.list));
+        _for_in_list(ptr, runnable_proc.begin)
+        {
+            dump_proc(container_of(ptr, struct proc, schinfo.list));
+        }
+    }
+    queue_unlock(&runnable_proc);
 }

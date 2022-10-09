@@ -25,8 +25,9 @@ void main()
     }
     else
     {
-        while (!boot_secondary_cpus);
-        arch_dsb_sy();
+        arch_stop_cpu();
+        // while (!boot_secondary_cpus);
+        // arch_dsb_sy();
     }
 
     // enter idle process
