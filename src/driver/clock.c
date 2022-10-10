@@ -17,7 +17,7 @@ void init_clock()
 
     // reserve one second for the first time.
     asm volatile("msr cntp_ctl_el0, %[x]" ::[x] "r"(1ll));
-    reset_clock(1000);
+    reset_clock(1);
 
     device_put_u32(CORE_CLOCK_CTRL(cpuid()), CORE_CLOCK_ENABLE);
 }
