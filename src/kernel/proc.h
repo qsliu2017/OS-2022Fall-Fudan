@@ -22,8 +22,6 @@ typedef struct UserContext
 
 typedef struct KernelContext
 {
-    // TODO: customize your context
-
     // x19-x30 are callee-saved register
 
     u64 x19; /* for new process, x19 is used as x30 */

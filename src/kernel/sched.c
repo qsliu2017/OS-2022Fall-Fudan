@@ -13,8 +13,6 @@ extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 extern NO_RETURN void idle_entry(u64);
 
-// static SleepLock sched_lock;
-
 extern struct proc *root_proc;
 
 static struct proc *running_proc[NCPU];
@@ -23,7 +21,6 @@ static struct proc *idle_proc[NCPU];
 
 define_init(sched)
 {
-    // init_sem(&sched_lock, 1);
     queue_init(&runnable_proc);
     running_proc[0] = root_proc;
     root_proc->state = RUNNING;
@@ -31,39 +28,35 @@ define_init(sched)
     {
         idle_proc[i] = create_proc();
         idle_proc[i]->idle = true;
+
+        /* idle_proc should not be child of root, otherwise root_proc will wait for it forever. */
         idle_proc[i]->parent = idle_proc[i];
+
         start_proc(idle_proc[i], idle_entry, 0);
         if (i != 0)
         {
             running_proc[i] = idle_proc[i];
             running_proc[i]->state = RUNNING;
         }
-        // queue_push(&runnable_proc, &idle->schinfo.list);
     }
 }
 
 struct proc *thisproc()
 {
-    // TODO: return the current process
     return running_proc[cpuid()];
 }
 
 void init_schinfo(struct schinfo *p)
 {
-    // TODO: initialize your customized schinfo for every newly-created process
     init_list_node(&p->list);
 }
 
 void _acquire_sched_lock()
 {
-    // TODO: acquire the sched_lock if need
-    // wait_sem(&sched_lock);
 }
 
 void _release_sched_lock()
 {
-    // TODO: release the sched_lock if need
-    // post_sem(&sched_lock);
 }
 
 bool is_zombie(struct proc *p)
@@ -133,8 +126,6 @@ static void update_this_state(enum procstate new_state)
 
 static struct proc *pick_next()
 {
-    // TODO: if using simple_sched, you should implement this routinue
-    // choose the next process to run, and return idle if no runnable process
     struct proc *next = idle_proc[cpuid()];
     queue_lock(&runnable_proc);
     if (!queue_empty(&runnable_proc))
@@ -148,8 +139,6 @@ static struct proc *pick_next()
 
 static void update_this_proc(struct proc *p)
 {
-    // TODO: if using simple_sched, you should implement this routinue
-    // update thisproc to the choosen process, and reset the clock interrupt if need
     ASSERT(running_proc[cpuid()] == NULL);
     running_proc[cpuid()] = p;
 }
@@ -162,8 +151,6 @@ static void simple_sched(enum procstate new_state)
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();
-    // printk("CPU %d: switch from %d to %d\n", cpuid(), this->pid, next->pid);
-    // dump_sched();
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
@@ -175,15 +162,6 @@ static void simple_sched(enum procstate new_state)
 }
 
 __attribute__((weak, alias("simple_sched"))) void _sched(enum procstate new_state);
-
-/*
-u64 proc_entry(void (*entry)(u64), u64 arg)
-{
-    _release_sched_lock();
-    set_return_addr(entry);
-    return arg;
-}
-*/
 
 void dump_sched()
 {

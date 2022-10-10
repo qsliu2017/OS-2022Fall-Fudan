@@ -6,6 +6,8 @@
 #include <common/string.h>
 #include <kernel/printk.h>
 
+static void destroy_proc(struct proc *p);
+
 struct proc *root_proc;
 
 define_early_init(root_proc)
@@ -16,16 +18,19 @@ define_early_init(root_proc)
     // start_proc(root_proc, kernel_entry, 123456);
 }
 
-void kernel_entry();
-void proc_entry();
+static void proc_entry();
 
-void set_parent_to(struct proc *parent, struct proc *child)
+/*
+ * Set proc's parent, add it to parent's children and notify new parent
+ * if proc is ZOMBIE.
+ *
+ * It is parent's responsibility to remove child from children list.
+ */
+static inline void set_parent_to(struct proc *parent, struct proc *child)
 {
-    ASSERT(child->parent == NULL || child->parent == parent);
+    ASSERT(child->parent == NULL);
     ASSERT(_empty_list(&child->sibling));
     child->parent = parent;
-    // setup_checker(0);
-    // acquire_sleeplock(0, &parent->children_lock);
     if (child->state == ZOMBIE)
     {
         merge_list(&parent->children_lock, &parent->children_exit, &child->sibling);
@@ -35,7 +40,6 @@ void set_parent_to(struct proc *parent, struct proc *child)
     {
         merge_list(&parent->children_lock, &parent->children_other, &child->sibling);
     }
-    // release_sleeplock(0, &parent->children_lock);
 }
 
 void set_parent_to_this(struct proc *proc)
@@ -49,34 +53,38 @@ void set_parent_to_this(struct proc *proc)
 NO_RETURN void exit(int code)
 {
     auto this = thisproc();
-    // TODO
-    // 1. set the exitcode
+
     this->exitcode = code;
-    // 2. clean up the resources
-    // 3. transfer children to the root_proc, and notify the root_proc if there is zombie
-    // setup_checker(0);
-    // acquire_sleeplock(0, &this->children_lock);
-    for (auto ptr = this->children_other.next; ptr != &this->children_other; ptr = this->children_other.next)
+
     {
-        struct proc *p = container_of(ptr, struct proc, sibling);
-        detach_from_list(&this->children_lock, &p->sibling);
-        p->parent = NULL;
-        set_parent_to(root_proc, p);
+        // transfer children to the root_proc, and notify the root_proc if there is zombie
+        setup_checker(0);
+        acquire_spinlock(0, &this->children_lock);
+        while (!_empty_list(&this->children_other))
+        {
+            struct proc *p = container_of(this->children_other.next, struct proc, sibling);
+            _detach_from_list(&p->sibling);
+            p->parent = NULL;
+            set_parent_to(root_proc, p);
+        }
+        while (!_empty_list(&this->children_exit))
+        {
+            struct proc *p = container_of(this->children_exit.next, struct proc, sibling);
+            _detach_from_list(&p->sibling);
+            p->parent = NULL;
+            set_parent_to(root_proc, p);
+        }
+        release_spinlock(0, &this->children_lock);
     }
-    for (auto ptr = this->children_exit.next; ptr != &this->children_exit; ptr = this->children_exit.next)
+
     {
-        struct proc *p = container_of(ptr, struct proc, sibling);
-        detach_from_list(&this->children_lock, &p->sibling);
-        p->parent = NULL;
-        set_parent_to(root_proc, p);
+        // move self from children_other to children_exit; notify parent.
+        detach_from_list(&this->parent->children_lock, &this->sibling);
+        merge_list(&this->parent->children_lock, &this->parent->children_exit, &this->sibling);
+        post_sem(&this->parent->childexit);
     }
-    // release_sleeplock(0, &root_proc->children_lock);
-    // 4. sched(ZOMBIE)
-    detach_from_list(&this->parent->children_lock, &this->sibling);
-    insert_into_list(&this->parent->children_lock, &this->parent->children_exit, &this->sibling);
-    post_sem(&this->parent->childexit);
+
     _sched(ZOMBIE);
-    // NOTE: be careful of concurrency
 
     PANIC(); // prevent the warning of 'no_return function returns'
 }
@@ -84,57 +92,61 @@ NO_RETURN void exit(int code)
 int wait(int *exitcode)
 {
     auto this = thisproc();
-    int ret = 0;
-    // TODO
-    // 1. return -1 if no children
-    // setup_checker(0);
-    // acquire_sleeplock(0, &this->children_lock);
+
+    setup_checker(0);
+    acquire_spinlock(0, &this->children_lock);
     if (_empty_list(&this->children_exit) && _empty_list(&this->children_other))
     {
-        ret = -1;
-        goto ret;
+        // return -1 if no children
+        release_spinlock(0, &this->children_lock);
+        return -1;
     }
-    // 2. wait for childexit
-    // 3. if any child exits, clean it up and return its pid and exitcode
-    // release_sleeplock(0, &this->children_lock);
+
+    // release children_lock before wait, so child is posible to move in children_exit list
+    release_spinlock(0, &this->children_lock);
+    // wait for childexit
     ASSERT(wait_sem(&this->childexit));
-    // acquire_sleeplock(0, &this->children_lock);
+
+    // if any child exits, clean it up and return its pid and exitcode
+    setup_checker(1);
+    acquire_spinlock(1, &this->children_lock);
     auto ptr = this->children_exit.next;
-    detach_from_list(&this->children_lock, ptr);
+    _detach_from_list(ptr);
+    release_spinlock(1, &this->children_lock);
+
     struct proc *child = container_of(ptr, struct proc, sibling);
     *exitcode = child->exitcode;
-    ret = child->pid;
-    if (child->kcontext)
-    {
-        kfree_page(child->kcontext);
-    }
-    kfree(child);
-ret:
-    // release_sleeplock(0, &this->children_lock);
-    return ret;
-    // NOTE: be careful of concurrency
+    int pid = child->pid;
+    destroy_proc(child);
+    return pid;
 }
-
-const isize KSTACK_SIZE = 4096;
 
 int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
 {
-    // TODO
-    // 1. set the parent to root_proc if NULL
+    // set the parent to root_proc if NULL
     if (p->parent == NULL)
         set_parent_to(root_proc, p);
-    // 2. setup the kcontext to make the proc start with proc_entry(entry, arg)
+
+    // setup the kcontext to make the proc start with proc_entry(entry, arg)
     p->kstack = kalloc_page();
-    p->kcontext = p->kstack + KSTACK_SIZE - sizeof(KernelContext);
+    p->kcontext = p->kstack + PAGE_SIZE - sizeof(KernelContext);
     p->kcontext->x19 = (u64)entry;
     p->kcontext->x20 = arg;
     p->kcontext->x29 = (u64)p->kcontext;
     p->kcontext->x30 = (u64)proc_entry;
 
-    // 3. activate the proc and return its pid
+    // activate the proc and return its pid
     activate_proc(p);
     return p->pid;
-    // NOTE: be careful of concurrency
+}
+
+void destroy_proc(struct proc *p)
+{
+    if (p->kstack)
+    {
+        kfree_page(p->kstack);
+    }
+    kfree(p);
 }
 
 static inline int next_pid()
@@ -162,7 +174,7 @@ struct proc *create_proc()
 
     p->parent = NULL;
     init_list_node(&p->sibling);
-    init_list_node(&p->schinfo.list);
+    init_schinfo(&p->schinfo);
     p->kstack = NULL;
     p->ucontext = NULL;
     p->kcontext = NULL;
