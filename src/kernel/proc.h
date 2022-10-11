@@ -25,8 +25,8 @@ typedef struct KernelContext
     // x19-x30 are callee-saved register
 
     u64 x19; /* for new process, x19 is used as x30 */
-    u64 x20; /* for new process, x19 is used as x0(agrc) */
-    u64 x21; /* for new process, x19 is used as x1(agrv) */
+    u64 x20; /* for new process, x20 is used as x0(argc) */
+    u64 x21; /* for new process, x21 is used as x1(argv) */
     u64 x22;
     u64 x23;
     u64 x24;
