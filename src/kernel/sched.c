@@ -92,6 +92,13 @@ bool activate_proc(struct proc *p)
     default:
         PANIC();
     }
+bool is_unused(struct proc* p)
+{
+    bool r;
+    _acquire_sched_lock();
+    r = p->state == ZOMBIE;
+    _release_sched_lock();
+    return r;
 }
 
 // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE

@@ -121,7 +121,15 @@ int wait(int *exitcode)
     return pid;
 }
 
-int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
+int kill(int pid)
+{
+    // TODO
+    // Set the killed flag of the proc to true and return 0.
+    // Return -1 if the pid is invalid (proc not found).
+    
+}
+
+int start_proc(struct proc* p, void(*entry)(u64), u64 arg)
 {
     // set the parent to root_proc if NULL
     if (p->parent == NULL)
