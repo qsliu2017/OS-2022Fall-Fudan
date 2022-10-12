@@ -1,12 +1,12 @@
 # OS Lab 3
 
-Handin commit hash: `git checkout c2273d67f1c90c7780fdfb3576fcd8dc6e37754e`
+Handin commit hash: `git checkout ff7827d9845522d84fdffb7ffd270fe1a2b61603`
 
 I speed timer up to 1ms to test if it works well with interuption. In every timer interuption it print out a log, so it looks a little bit mess...
 
 To filter clock info: `cmake .. && make qemu | grep -E -v "CPU [[:digit:]]+: clock"`
 
-To print log until test pass:`cmake .. && make qemu | sed '/proc_test PASS/q'`
+To print log until test pass: `cmake .. && make qemu | sed '/proc_test PASS/q'`
 
 ## Non-preemptive schedule
 
@@ -76,15 +76,17 @@ struct KernelContext
 };
 ```
 
-When creating new thread, we save the real entry in `x19` field of `KernelContext`. `x30` saves `proc_entry` instead. `proc_entry` simply move those parameters and return to real entry (a simple version of [glibc `_start`](https://github.com/qsliu2017/glibc/blob/master/sysdeps/aarch64/start.S)).
+When creating new thread, we save the real entry in `KernelContext.x19`, and `proc_entry` in `x30` instead. `proc_entry` is a simple version of [glibc `_start`](https://github.com/qsliu2017/glibc/blob/master/sysdeps/aarch64/start.S). It moves those parameters and call the real entry function (restored in `x19`). In case the process does not `exit` and returns here, `proc_entry` calls `exit` redundantly. Note that process return value is stored in `x0` and then passed to `exit`, which is like normal `int main(int argc, void *argc)`.
 
 ```c
 void proc_entry()
 {
   asm(
-    "mov x30, x19\n\t"
     "mov x0, x20\n\t"
     "mov x1, x21\n\t"
+    "br x19\n\t"
+    "ldr x19, =exit\n\t"
+    "br x19\n\t"
   );
 }
 ```
@@ -94,6 +96,10 @@ Finally we implement (1), so-called **policy** part.
 ## Policy: Which thread to choose?
 
 We simply use FCFS algorithm to choose next thread. Since several CPUs might schedule at the same time, a spinlock is required.
+
+A process is created by `create_proc`, which allocates and initializes a PCB (without `parent` and `stack`). Parent can set itself as the parent of the new process (`set_parent_to_this`), otherwise `start_proc` will set `root_proc` as its parent. Other than that, `start_proc` requests a page as its stack.
+
+A normal process should NOT `sched(SLEEPING)` itself, otherwise no process can wake it up and even kernel loses its reference.
 
 ## Real World `setjmp`/`longjmp`
 
