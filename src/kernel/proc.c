@@ -185,9 +185,11 @@ struct proc *create_proc()
 void proc_entry()
 {
     asm(
-        "mov x30, x19\n\t"
         "mov x0, x20\n\t"
-        "mov x1, x21\n\t");
+        "mov x1, x21\n\t"
+        "br x19\n\t"
+        "ldr x19, =exit\n\t"
+        "br x19\n\t");
 }
 
 void dump_proc(struct proc const *p)
