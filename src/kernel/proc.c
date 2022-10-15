@@ -126,7 +126,8 @@ int kill(int pid)
     // TODO
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
-    
+    (void)(pid);
+    return -1;
 }
 
 int start_proc(struct proc* p, void(*entry)(u64), u64 arg)
@@ -150,6 +151,7 @@ int start_proc(struct proc* p, void(*entry)(u64), u64 arg)
 
 void destroy_proc(struct proc *p)
 {
+    free_pgdir(&p->pgdir);
     if (p->kstack)
     {
         kfree_page(p->kstack);
@@ -183,6 +185,7 @@ struct proc *create_proc()
     p->parent = NULL;
     init_list_node(&p->sibling);
     init_schinfo(&p->schinfo);
+    init_pgdir(&p->pgdir);
     p->kstack = NULL;
     p->ucontext = NULL;
     p->kcontext = NULL;

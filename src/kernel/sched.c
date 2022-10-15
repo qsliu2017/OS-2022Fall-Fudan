@@ -92,7 +92,9 @@ bool activate_proc(struct proc *p)
     default:
         PANIC();
     }
-bool is_unused(struct proc* p)
+}
+
+bool is_unused(struct proc *p)
 {
     bool r;
     _acquire_sched_lock();

@@ -39,7 +39,7 @@ void kinit_page()
 void *kalloc_page()
 {
     auto freepage = container_of(fetch_from_queue(&freepages), Page, freequeue);
-    // ASSERT(freepage != NULL);
+    ASSERT(freepage != NULL);
     return freepage->mem;
 }
 
