@@ -9,6 +9,7 @@ bool panic_flag;
 
 NO_RETURN void idle_entry() {
     set_cpu_on();
+    set_sched_timer();
     while (1) {
         yield();
         if (panic_flag)
@@ -22,6 +23,8 @@ NO_RETURN void idle_entry() {
 }
 
 NO_RETURN void kernel_entry() {
+    set_cpu_on();
+    set_sched_timer();
     printk("hello world %d\n", (int)sizeof(struct proc));
 
     // proc_test();

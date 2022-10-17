@@ -11,6 +11,7 @@ void do_early_init()
     early_init_alloc_page_cnt();
     early_init_cache();
     early_init_root_proc();
+    early_init___syscall_myreport();
 }
 
 void do_rest_init()

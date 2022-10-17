@@ -1,6 +1,7 @@
 #include <kernel/proc.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
+#include <kernel/pt.h>
 #include <kernel/sched.h>
 #include <common/list.h>
 #include <common/string.h>
@@ -130,19 +131,23 @@ int kill(int pid)
     return -1;
 }
 
-int start_proc(struct proc* p, void(*entry)(u64), u64 arg)
+int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
 {
     // set the parent to root_proc if NULL
     if (p->parent == NULL)
         set_parent_to(root_proc, p);
 
     // setup the kcontext to make the proc start with proc_entry(entry, arg)
-    p->kstack = kalloc_page();
-    p->kcontext = p->kstack + PAGE_SIZE - sizeof(KernelContext);
+    ASSERT(p->kstack != NULL);
+    ASSERT(p->kcontext != NULL);
     p->kcontext->x19 = (u64)entry;
     p->kcontext->x20 = arg;
     p->kcontext->x29 = (u64)p->kcontext;
     p->kcontext->x30 = (u64)proc_entry;
+
+    auto page = kalloc_page();
+    *get_pte(&p->pgdir, 0x200000, true) = K2P((u64)page) | PTE_USER_DATA;
+    p->ucontext->sp = 0x200000 + PAGE_SIZE;
 
     // activate the proc and return its pid
     activate_proc(p);
@@ -186,9 +191,10 @@ struct proc *create_proc()
     init_list_node(&p->sibling);
     init_schinfo(&p->schinfo);
     init_pgdir(&p->pgdir);
-    p->kstack = NULL;
-    p->ucontext = NULL;
-    p->kcontext = NULL;
+
+    p->kstack = kalloc_page();
+    p->ucontext = p->kstack + PAGE_SIZE - sizeof(UserContext);
+    p->kcontext = (void *)p->ucontext - sizeof(KernelContext);
 
     return p;
 }

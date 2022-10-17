@@ -165,12 +165,30 @@ static void simple_sched(enum procstate new_state)
     next->state = RUNNING;
     if (next != this)
     {
+        attach_pgdir(&next->pgdir);
         swtch(next->kcontext, &this->kcontext);
     }
     _release_sched_lock();
 }
 
 __attribute__((weak, alias("simple_sched"))) void _sched(enum procstate new_state);
+
+static struct timer _sched_timer[NCPU];
+
+void set_sched_timer()
+{
+    struct timer *t = &_sched_timer[cpuid()];
+    t->elapse = 1000;
+    t->handler = sched_timer_handler;
+    set_cpu_timer(t);
+}
+
+void sched_timer_handler(struct timer *t)
+{
+    (void)(t);
+    set_sched_timer();
+    _sched(RUNNABLE);
+}
 
 void dump_sched()
 {

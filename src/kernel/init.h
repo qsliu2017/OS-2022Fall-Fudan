@@ -22,6 +22,7 @@ define_early_init(alloc_page_cnt);
 define_early_init(printk);
 define_early_init(root_proc);
 define_early_init(cache);
+define_early_init(__syscall_myreport);
 
 // Allocator available
 /*
