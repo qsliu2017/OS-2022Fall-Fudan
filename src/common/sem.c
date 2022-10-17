@@ -99,3 +99,14 @@ void _post_sem(Semaphore* sem)
         activate_proc(wait->proc);
     }
 }
+
+SleepLock *_raii_acquire_sleeplock(SleepLock *lock)
+{
+    wait_sem(lock);
+    return lock;
+}
+
+void _raii_release_sleeplock(SleepLock **lock)
+{
+    post_sem(*lock);
+}

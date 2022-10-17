@@ -36,3 +36,7 @@ void _post_sem(Semaphore*);
 #define init_sleeplock(lock) init_sem(lock, 1)
 #define acquire_sleeplock(checker, lock) (checker_begin_ctx(checker), wait_sem(lock))
 #define release_sleeplock(checker, lock) (post_sem(lock), checker_end_ctx(checker))
+
+SleepLock *_raii_acquire_sleeplock(SleepLock *lock);
+void _raii_release_sleeplock(SleepLock **lock);
+#define raii_acquire_sleeplock(lock, id) SleepLock *_raii_sleeplock_##id __attribute__((__cleanup__(_raii_release_sleeplock))) = _raii_acquire_sleeplock(lock)

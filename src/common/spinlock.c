@@ -18,6 +18,17 @@ void _acquire_spinlock(SpinLock* lock) {
         arch_yield();
 }
 
+SpinLock *_raii_acquire_spinlock(SpinLock *lock)
+{
+    _acquire_spinlock(lock);
+    return lock;
+}
+
 void _release_spinlock(SpinLock* lock) {
     __atomic_clear(&lock->locked, __ATOMIC_RELEASE);
+}
+
+void _raii_release_spinlock(SpinLock **lock)
+{
+    _release_spinlock(*lock);
 }

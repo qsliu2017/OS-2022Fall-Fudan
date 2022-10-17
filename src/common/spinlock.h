@@ -24,3 +24,8 @@ void init_spinlock(SpinLock*);
 // Release a spinlock
 #define release_spinlock(checker, lock) checker_end_ctx_after_call(checker, _release_spinlock, lock)
 
+SpinLock *_raii_acquire_spinlock(SpinLock *lock);
+void _raii_release_spinlock(SpinLock **lock);
+
+// Acquire a spinlock. Auto release after block scope.
+#define raii_acquire_spinlock(lock, id) SpinLock *_raii_lock_##id __attribute__((__cleanup__(_raii_release_spinlock))) = _raii_acquire_spinlock(lock)
