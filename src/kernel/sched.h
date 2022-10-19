@@ -17,7 +17,6 @@ void _sched(enum procstate new_state);
 
 struct proc *thisproc();
 
-void set_sched_timer();
 void sched_timer_handler(struct timer *);
 
 void dump_sched();

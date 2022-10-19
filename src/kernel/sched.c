@@ -13,6 +13,7 @@ extern bool panic_flag;
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 extern NO_RETURN void idle_entry(u64);
+extern void proc_entry();
 
 static Queue runnable_proc_queue;
 
@@ -34,8 +35,22 @@ define_init(sched)
         idle->pgdir.pt = NULL;
 
         cpus[i].sched.running = idle;
+
+        auto timer = &cpus[i].sched.sched_timer;
+        timer->elapse = 89;
+        timer->handler = sched_timer_handler;
     }
-    // BUG idle 0 illegle
+    {
+        // Ugly trick to fix idle0
+        auto idle = &cpus[0].sched.idle;
+        idle->state = RUNNABLE;
+        idle->kstack = kalloc_page();
+        idle->ucontext = idle->kstack + PAGE_SIZE - sizeof(UserContext);
+        idle->kcontext = (void *)idle->ucontext - sizeof(KernelContext);
+        idle->kcontext->x19 = (u64)idle_entry;
+        idle->kcontext->x29 = (u64)idle->kcontext;
+        idle->kcontext->x30 = (u64)proc_entry;
+    }
     root_proc.state = RUNNING;
     cpus[0].sched.running = &root_proc;
     cpus[0].sched.idle.state = RUNNABLE;
@@ -183,21 +198,10 @@ static void simple_sched(enum procstate new_state)
 
 __attribute__((weak, alias("simple_sched"))) void _sched(enum procstate new_state);
 
-void set_sched_timer()
-{
-    auto t = &cpus[cpuid()].sched.timer;
-    t->elapse = 100;
-    t->handler = sched_timer_handler;
-    set_cpu_timer(t);
-}
-
 void sched_timer_handler(struct timer *t)
 {
-    (void)(t);
-    set_sched_timer();
+    set_cpu_timer(t);
     yield();
-    // printk("sched timer on cpu %d\n", cpuid());
-    // dump_sched();
 }
 
 void dump_sched()

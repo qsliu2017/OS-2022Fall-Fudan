@@ -92,6 +92,7 @@ void set_cpu_on() {
     hello_timer[cpuid()].elapse = 5000;
     hello_timer[cpuid()].handler = hello;
     set_cpu_timer(&hello_timer[cpuid()]);
+    set_cpu_timer(&cpus[cpuid()].sched.sched_timer);
 }
 
 void set_cpu_off() {

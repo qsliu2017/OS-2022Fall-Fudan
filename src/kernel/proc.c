@@ -22,7 +22,7 @@ static inline void init_proc(struct proc *p)
 
     /* init private fields */
 
-    init_pgdir(&p->pgdir);
+    p->pgdir.pt = NULL;
     p->kstack = NULL;
     p->ucontext = NULL;
     p->kcontext = NULL;
@@ -58,6 +58,7 @@ struct proc *create_proc()
 
     init_proc(p);
 
+    init_pgdir(&p->pgdir);
     p->kstack = kalloc_page();
     p->ucontext = p->kstack + PAGE_SIZE - sizeof(UserContext);
     p->kcontext = (void *)p->ucontext - sizeof(KernelContext);
@@ -73,7 +74,7 @@ void set_parent_to_this(struct proc *proc)
     _merge_list(&this->children, &proc->sibling);
 }
 
-static void proc_entry()
+void proc_entry()
 {
     asm(
         "bl _release_sched_lock\n"

@@ -9,5 +9,5 @@ struct sched
 {
   struct proc *running;
   struct proc idle;
-  struct timer timer;
+  struct timer sched_timer;
 };
