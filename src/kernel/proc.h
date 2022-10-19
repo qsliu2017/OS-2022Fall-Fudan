@@ -47,6 +47,18 @@ typedef struct UserContext
     u64 x16;
     u64 x17;
     u64 x18;
+    u64 x19;
+    u64 x20;
+    u64 x21;
+    u64 x22;
+    u64 x23;
+    u64 x24;
+    u64 x25;
+    u64 x26;
+    u64 x27;
+    u64 x28;
+    u64 x29;
+    u64 x30;
 
 } UserContext;
 
@@ -69,31 +81,44 @@ typedef struct KernelContext
 
 } KernelContext;
 
+// ProcLock is spinlock hold by process(thread)
+typedef struct
+{
+    struct proc *volatile holder;
+} ProcLock;
+
 struct proc
 {
-    bool killed;
-    bool idle;
+    /* Constant fields */
+
     int pid;
-    int exitcode;
-    enum procstate state;
+    bool idle;
 
-    Semaphore childexit;
-    ListNode children_exit;
-    ListNode children_other;
-    SpinLock children_lock;
+    /* Private fields */
 
-    struct proc *parent;
-    ListNode sibling;
-
-    ListNode ptnode;
-
-    struct schinfo schinfo;
     struct pgdir pgdir;
     void *kstack;
     UserContext *ucontext;
     KernelContext *kcontext;
+
+    /* Owned by sched.c */
+
+    struct schinfo schinfo;
+
+    /* Shared fields. Should hold proc lock first. */
+
+    bool killed;
+    int exitcode;
+    enum procstate state;
+    Semaphore childexit;
+    ListNode children;
+    struct proc *parent;
+    ListNode sibling;
 };
 
+extern struct proc root_proc;
+
+// Allocate an unused proc with kstack, init most fields and hold its lock. Panic if no available proc.
 struct proc *create_proc();
 int start_proc(struct proc *, void (*entry)(u64), u64 arg);
 NO_RETURN void exit(int code);
@@ -101,3 +126,22 @@ int wait(int *exitcode);
 int kill(int pid);
 
 void dump_proc(struct proc const *p);
+
+void init_proclock(ProcLock *);
+
+// Non-block acquire proc lock, return true on success. Panic if already hold by thisproc().
+bool _try_acq_proclock(ProcLock *);
+// Block acquire proc lock. Panic if already hold by thisproc().
+void _acq_proclock(ProcLock *);
+// Release proc lock. Panic if not hold by thisproc().
+void _rel_proclock(ProcLock *);
+
+// Do NOT use this. Use raii_acq_proclock instead.
+ProcLock *__raii_acq_proclock(ProcLock *);
+// Do NOT use this.
+void __raii_rel_proclock(ProcLock **);
+// Block acquire proc lock, release when the scope goes out.
+#define raii_acq_proclock(lock, id) ProcLock *__proclock_##id __attribute__((__cleanup__(__raii_rel_proclock))) = __raii_acq_proclock(lock)
+
+// Return true if thisproc() is holding lock
+bool holding_proclock(ProcLock *);

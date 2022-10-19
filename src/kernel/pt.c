@@ -47,7 +47,7 @@ typedef void pte_func(u64 pte);
 
 static void walk_pgt(u64 *pgt, int level, pte_func *f)
 {
-    printk("walk_pgt(pt=0x%p, level=%d, f=0x%p)\n", pgt, level, f);
+    // printk("walk_pgt(pt=0x%p, level=%d, f=0x%p)\n", pgt, level, f);
     if (level < 3)
     {
         for (int i = 0; i < N_PTE_PER_TABLE; i++)

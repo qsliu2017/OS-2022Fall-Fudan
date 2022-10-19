@@ -4,6 +4,12 @@
 /* `exception_vector.S` send all traps here. */
 .global trap_entry
 trap_entry:
+  pushp(x29, x30)
+  pushp(x27, x28)
+  pushp(x25, x26)
+  pushp(x23, x24)
+  pushp(x21, x22)
+  pushp(x19, x20)
   pushp(x17, x18)
   pushp(x15, x16)
   pushp(x13, x14)
@@ -42,6 +48,12 @@ trap_return:
   popp(x13, x14)
   popp(x15, x16)
   popp(x17, x18)
+  popp(x19, x20)
+  popp(x21, x22)
+  popp(x23, x24)
+  popp(x25, x26)
+  popp(x27, x28)
+  popp(x29, x30)
 
   eret
 
