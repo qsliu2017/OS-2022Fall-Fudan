@@ -8,7 +8,8 @@
 bool panic_flag;
 
 NO_RETURN void idle_entry() {
-    set_cpu_on();
+    if (cpuid()) // cpu 0 has set cpu on in kernel_entry`V
+        set_cpu_on();
     while (1) {
         yield();
         if (panic_flag)
