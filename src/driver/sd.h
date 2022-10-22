@@ -21,4 +21,5 @@
 void sd_init();
 void sd_intr();
 void sd_test();
+void sd_parallel_test();
 void sdrw(buf*);

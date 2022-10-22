@@ -263,3 +263,121 @@ void sd_test()
     printk("- write %dB (%dMB), t: %lld cycles, speed: %lld.%lld MB/s\n",
            n * BSIZE, mb, t, mb * f / t, (mb * f * 10 / t) % 10);
 }
+
+static struct buf b[1 << 11];
+static const int n = sizeof(b) / sizeof(b[0]);
+static const int mb = (n * BSIZE) >> 20;
+#define N_THREAD 4
+static i64 ts[N_THREAD];
+static Semaphore _parallel_sem;
+static void _parallel_sd_test_entry(u64 part);
+
+static volatile bool CORRECTNESS, W_BENCH;
+
+void sd_parallel_test()
+{
+    i64 f, t;
+    asm volatile("mrs %[freq], cntfrq_el0"
+                 : [freq] "=r"(f));
+    // Parallel test
+    for (int __i = 3; __i > 0; __i--)
+    {
+        CORRECTNESS = __i >= 3;
+        W_BENCH = __i >= 2;
+        init_sem(&_parallel_sem, 0);
+        for (int p = 0; p < N_THREAD; p++)
+        {
+            ts[p] = 0;
+            auto proc = create_proc();
+            start_proc(proc, _parallel_sd_test_entry, p);
+        }
+        for (int p = 0; p < N_THREAD; p++)
+            wait_sem(&_parallel_sem);
+        t = 0;
+        for (int p = 0; p < N_THREAD; p++)
+        {
+            t += ts[p];
+        }
+        printk("- read %dB (%dMB), t: %lld cycles, speed: %lld.%lld MB/s\n",
+               n * BSIZE, mb, t, mb * f / t, (mb * f * 10 / t) % 10);
+    }
+}
+
+void _parallel_sd_test(struct buf b[], int from, int to, i64 *t)
+{
+    if (CORRECTNESS)
+    {
+        (void)(t);
+        struct buf backup;
+        for (int i = from; i < to; i++)
+        {
+            // Backup.
+            backup.flags = 0;
+            backup.blockno = (u32)i;
+            sdrw(&backup);
+            // Write some value.
+            b[i].flags = B_DIRTY;
+            b[i].blockno = (u32)i;
+            for (int j = 0; j < BSIZE; j++)
+                b[i].data[j] = (u8)((i * j) & 0xFF);
+            sdrw(&b[i]);
+
+            memset(b[i].data, 0, sizeof(b[i].data));
+            // Read back and check
+            b[i].flags = 0;
+            sdrw(&b[i]);
+            for (int j = 0; j < BSIZE; j++)
+            {
+                //   assert(b[i].data[j] == (i * j & 0xFF));
+                if (b[i].data[j] != (i * j & 0xFF))
+                    PANIC();
+            }
+            // Restore previous value.
+            backup.flags = B_DIRTY;
+            sdrw(&backup);
+        }
+    }
+    else if (W_BENCH)
+    {
+        i64 _t;
+        // Write benchmark
+        arch_dsb_sy();
+        _t = (i64)get_timestamp();
+        arch_dsb_sy();
+        for (int i = from; i < to; i++)
+        {
+            b[i].flags = B_DIRTY;
+            b[i].blockno = (u32)i;
+            sdrw(&b[i]);
+        }
+        arch_dsb_sy();
+        _t = (i64)get_timestamp() - _t;
+        arch_dsb_sy();
+        *t = _t;
+    }
+    else
+    {
+        i64 _t;
+        // Read benchmark
+        arch_dsb_sy();
+        _t = (i64)get_timestamp();
+        arch_dsb_sy();
+        for (int i = from; i < to; i++)
+        {
+            b[i].flags = 0;
+            b[i].blockno = (u32)i;
+            sdrw(&b[i]);
+        }
+        arch_dsb_sy();
+        _t = (i64)get_timestamp() - _t;
+        arch_dsb_sy();
+        *t = _t;
+    }
+    post_sem(&_parallel_sem);
+    exit(0);
+}
+
+void _parallel_sd_test_entry(u64 part)
+{
+    _parallel_sd_test(b, part * (n / N_THREAD), (part + 1) * (n / N_THREAD), &ts[part]);
+}
