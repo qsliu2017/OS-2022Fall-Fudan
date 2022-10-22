@@ -2,6 +2,7 @@
 
 #include <common/defines.h>
 #include <common/list.h>
+#include <common/queue.h>
 #include <common/string.h>
 #include <common/sem.h>
 
@@ -15,4 +16,7 @@ typedef struct buf
     int flags;
     u32 blockno;
     u8 data[BSIZE]; // 1B*512
+
+    Message _msg;
+    Semaphore sem;
 } buf;

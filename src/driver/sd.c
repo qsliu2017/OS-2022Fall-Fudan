@@ -1,4 +1,6 @@
+#include <common/queue.h>
 #include <driver/sddef.h>
+#include <kernel/proc.h>
 
 /*
  * Initialize SD card.
@@ -33,7 +35,66 @@ ALWAYS_INLINE u32 get_and_clear_EMMC_INTERRUPT()
     return t;
 }
 
-static SleepLock sd_lock;
+static Channel sd_channel;
+
+static i64 t_wfwi = 0, t_wfri0 = 0, t_wfri1 = 0;
+
+static NO_RETURN void sd_service(u64 arg)
+{
+    (void)(arg);
+    for (;;)
+    {
+        auto m = channel_pop(&sd_channel);
+        struct buf *b = container_of(m, struct buf, _msg);
+        int write = b->flags & B_DIRTY;
+        sd_start(b);
+        int intr;
+        if (write)
+        {
+            arch_dsb_sy();
+            t_wfwi -= (i64)get_timestamp();
+            arch_dsb_sy();
+
+            while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
+                arch_wfi();
+
+            arch_dsb_sy();
+            t_wfwi += (i64)get_timestamp();
+            arch_dsb_sy();
+
+            b->flags = 0;
+        }
+        else
+        {
+            arch_dsb_sy();
+            t_wfri0 -= (i64)get_timestamp();
+            arch_dsb_sy();
+
+            while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_READ_RDY)
+                arch_wfi();
+
+            arch_dsb_sy();
+            t_wfri0 += (i64)get_timestamp();
+            arch_dsb_sy();
+
+            u32 *buf = (u32 *)b->data;
+            for (int i = 0; i < (int)(sizeof(b->data) / sizeof(u32)); i++)
+                buf[i] = get_EMMC_DATA();
+
+            arch_dsb_sy();
+            t_wfri1 -= (i64)get_timestamp();
+            arch_dsb_sy();
+
+            while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
+                arch_wfi();
+
+            arch_dsb_sy();
+            t_wfri1 += (i64)get_timestamp();
+            arch_dsb_sy();
+        }
+        post_sem(&b->sem);
+    }
+}
 
 /*
  * Initialize SD card and parse MBR.
@@ -61,7 +122,9 @@ void sd_init()
      * TODO: Lab5 driver.
      */
     sdInit();
-    init_sleeplock(&sd_lock);
+    channel_init(&sd_channel);
+    auto sd_proc = create_proc();
+    start_proc(sd_proc, sd_service, 0);
 }
 
 /* Start the request for b. Caller must hold sdlock. */
@@ -163,27 +226,9 @@ void sdrw(buf *b)
      * sd_start(), wait_sem() to complete this function.
      *  TODO: Lab5 driver.
      */
-    raii_acquire_sleeplock(&sd_lock, 0);
-    int write = b->flags & B_DIRTY;
-    sd_start(b);
-    int intr;
-    if (write)
-    {
-        arch_dsb_sy();
-        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
-            arch_wfi();
-    }
-    else
-    {
-        arch_dsb_sy();
-        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_READ_RDY)
-            arch_wfi();
-        u32 *buf = (u32 *)b->data;
-        for (int i = 0; i < (int)(sizeof(b->data) / sizeof(u32)); i++)
-            buf[i] = get_EMMC_DATA();
-        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
-            arch_wfi();
-    }
+    init_sem(&b->sem, 0);
+    channel_push(&sd_channel, &b->_msg);
+    wait_sem(&b->sem);
 }
 
 /* SD card test and benchmark. */
