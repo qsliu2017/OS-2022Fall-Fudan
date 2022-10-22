@@ -1,4 +1,3 @@
-
 #include <driver/sddef.h>
 
 /*
@@ -23,14 +22,18 @@ void set_interrupt_handler(InterruptType type, InterruptHandler handler);
 /*
 
 */
-ALWAYS_INLINE u32 get_EMMC_DATA() {
+ALWAYS_INLINE u32 get_EMMC_DATA()
+{
     return *EMMC_DATA;
 }
-ALWAYS_INLINE u32 get_and_clear_EMMC_INTERRUPT() {
+ALWAYS_INLINE u32 get_and_clear_EMMC_INTERRUPT()
+{
     u32 t = *EMMC_INTERRUPT;
     *EMMC_INTERRUPT = t;
     return t;
 }
+
+static SleepLock sd_lock;
 
 /*
  * Initialize SD card and parse MBR.
@@ -40,7 +43,8 @@ ALWAYS_INLINE u32 get_and_clear_EMMC_INTERRUPT() {
  * See https://en.wikipedia.org/wiki/Master_boot_record
  */
 
-void sd_init() {
+void sd_init()
+{
     /*
      * 1.call sdInit.
      * 2.Initialize the lock and request queue if any.
@@ -56,10 +60,13 @@ void sd_init() {
      * 4.don't forget to call this function somewhere
      * TODO: Lab5 driver.
      */
+    sdInit();
+    init_sleeplock(&sd_lock);
 }
 
 /* Start the request for b. Caller must hold sdlock. */
-static void sd_start(struct buf* b) {
+static void sd_start(struct buf *b)
+{
     // Address is different depending on the card type.
     // HC pass address as block #.
     // SC pass address straight through.
@@ -72,7 +79,8 @@ static void sd_start(struct buf* b) {
 
     arch_dsb_sy();
     // Ensure that any data operation has completed before doing the transfer.
-    if (*EMMC_INTERRUPT) {
+    if (*EMMC_INTERRUPT)
+    {
         printk("emmc interrupt flag should be empty: 0x%x. \n",
                *EMMC_INTERRUPT);
         PANIC();
@@ -85,26 +93,31 @@ static void sd_start(struct buf* b) {
     int resp;
     *EMMC_BLKSIZECNT = 512;
 
-    if ((resp = sdSendCommandA(cmd, bno))) {
-        printk("* EMMC send command error.\n");
+    if ((resp = sdSendCommandA(cmd, bno)))
+    {
+        printk("* EMMC send command error: %d.\n", resp);
         PANIC();
     }
 
     int done = 0;
-    u32* intbuf = (u32*)b->data;
-    if (!(((i64)b->data) & 0x03) == 0) {
+    u32 *intbuf = (u32 *)b->data;
+    if (!(((i64)b->data) & 0x03) == 0)
+    {
         printk("Only support word-aligned buffers. \n");
         PANIC();
     }
 
-    if (write) {
+    if (write)
+    {
         // Wait for ready interrupt for the next block.
-        if ((resp = sdWaitForInterrupt(INT_WRITE_RDY))) {
+        if ((resp = sdWaitForInterrupt(INT_WRITE_RDY)))
+        {
             printk("* EMMC ERROR: Timeout waiting for ready to write\n");
             PANIC();
             // return sdDebugResponse(resp);
         }
-        if (*EMMC_INTERRUPT) {
+        if (*EMMC_INTERRUPT)
+        {
             printk("%d\n", *EMMC_INTERRUPT);
             PANIC();
         }
@@ -114,7 +127,8 @@ static void sd_start(struct buf* b) {
 }
 
 /* The interrupt handler. Sync buf with disk.*/
-void sd_intr() {
+void sd_intr()
+{
     /*
      * Pay attention to whether there is any element in the buflist.
      * Understand the meanings of EMMC_INTERRUPT, EMMC_DATA, INT_DATA_DONE,
@@ -138,7 +152,8 @@ void sd_intr() {
      */
 }
 
-void sdrw(buf* b) {
+void sdrw(buf *b)
+{
     /*
      * 1.add buf to the queue
      * 2.if no buf in queue before,send request now
@@ -148,10 +163,32 @@ void sdrw(buf* b) {
      * sd_start(), wait_sem() to complete this function.
      *  TODO: Lab5 driver.
      */
+    raii_acquire_sleeplock(&sd_lock, 0);
+    int write = b->flags & B_DIRTY;
+    sd_start(b);
+    int intr;
+    if (write)
+    {
+        arch_dsb_sy();
+        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
+            arch_wfi();
+    }
+    else
+    {
+        arch_dsb_sy();
+        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_READ_RDY)
+            arch_wfi();
+        u32 *buf = (u32 *)b->data;
+        for (int i = 0; i < (int)(sizeof(b->data) / sizeof(u32)); i++)
+            buf[i] = get_EMMC_DATA();
+        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
+            arch_wfi();
+    }
 }
 
 /* SD card test and benchmark. */
-void sd_test() {
+void sd_test()
+{
     static struct buf b[1 << 11];
     int n = sizeof(b) / sizeof(b[0]);
     int mb = (n * BSIZE) >> 20;
@@ -159,12 +196,14 @@ void sd_test() {
     if (!mb)
         PANIC();
     i64 f, t;
-    asm volatile("mrs %[freq], cntfrq_el0" : [freq] "=r"(f));
+    asm volatile("mrs %[freq], cntfrq_el0"
+                 : [freq] "=r"(f));
     printk("- sd test: begin nblocks %d\n", n);
 
     printk("- sd check rw...\n");
     // Read/write test
-    for (int i = 1; i < n; i++) {
+    for (int i = 1; i < n; i++)
+    {
         // Backup.
         b[0].flags = 0;
         b[0].blockno = (u32)i;
@@ -180,7 +219,8 @@ void sd_test() {
         // Read back and check
         b[i].flags = 0;
         sdrw(&b[i]);
-        for (int j = 0; j < BSIZE; j++) {
+        for (int j = 0; j < BSIZE; j++)
+        {
             //   assert(b[i].data[j] == (i * j & 0xFF));
             if (b[i].data[j] != (i * j & 0xFF))
                 PANIC();
@@ -194,7 +234,8 @@ void sd_test() {
     arch_dsb_sy();
     t = (i64)get_timestamp();
     arch_dsb_sy();
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++)
+    {
         b[i].flags = 0;
         b[i].blockno = (u32)i;
         sdrw(&b[i]);
@@ -209,7 +250,8 @@ void sd_test() {
     arch_dsb_sy();
     t = (i64)get_timestamp();
     arch_dsb_sy();
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++)
+    {
         b[i].flags = B_DIRTY;
         b[i].blockno = (u32)i;
         sdrw(&b[i]);

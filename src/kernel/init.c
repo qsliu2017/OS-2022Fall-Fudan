@@ -1,3 +1,4 @@
+#include <driver/sd.h>
 #include <kernel/init.h>
 
 extern char early_init[], rest_init[], init[], einit[];
@@ -21,4 +22,5 @@ void do_rest_init()
 void do_init()
 {
     init_sched();
+    sd_init();
 }
