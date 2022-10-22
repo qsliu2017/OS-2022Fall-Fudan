@@ -30,6 +30,7 @@ NO_RETURN void kernel_entry() {
     // vm_test();
     // user_proc_test();
     sd_test();
+    sd_parallel_test();
     
     do_rest_init();
 
