@@ -71,11 +71,11 @@ void sd_init()
         };
         sdrw(&b);
         auto mbr_ptr = (struct MBR *)b.data;
-        ASSERT(mbr_ptr->check[0] == 0x55);
-        ASSERT(mbr_ptr->check[1] == 0xAA);
+        // ASSERT(mbr_ptr->check[0] == 0x55);
+        // ASSERT(mbr_ptr->check[1] == 0xAA);
 
-        (void)(mbr_ptr->partition_entries[1].lba);       // LBA of first absolute sector in the partition 2
-        (void)(mbr_ptr->partition_entries[1].n_sectors); // Number of sectors in partition 2
+        printk("LBA of first absolute sector in the partition 2: %d\n", mbr_ptr->partition_entries[1].lba);
+        printk("Number of sectors in partition 2: %d\n", mbr_ptr->partition_entries[1].n_sectors);
     }
 }
 
@@ -181,22 +181,22 @@ void sdrw(buf *b)
     raii_acquire_sleeplock(&sd_lock, 0);
     int write = b->flags & B_DIRTY;
     sd_start(b);
-    int intr;
     if (write)
     {
-        arch_dsb_sy();
-        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
+        while (arch_dsb_sy(), get_and_clear_EMMC_INTERRUPT() != INT_DATA_DONE)
             arch_wfi();
     }
     else
     {
-        arch_dsb_sy();
-        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_READ_RDY)
+        while (arch_dsb_sy(), get_and_clear_EMMC_INTERRUPT() != INT_READ_RDY)
             arch_wfi();
         u32 *buf = (u32 *)b->data;
-        for (int i = 0; i < (int)(sizeof(b->data) / sizeof(u32)); i++)
+        for (usize i = 0; i < sizeof(b->data) / sizeof(u32); i++)
+        {
+            arch_dsb_sy();
             buf[i] = get_EMMC_DATA();
-        while ((intr = get_and_clear_EMMC_INTERRUPT()) != INT_DATA_DONE)
+        }
+        while (arch_dsb_sy(), get_and_clear_EMMC_INTERRUPT() != INT_DATA_DONE)
             arch_wfi();
     }
 }
