@@ -22,4 +22,18 @@ void sd_init();
 void sd_intr();
 void sd_test();
 void sd_parallel_test();
-void sdrw(buf*);
+void sdrw(buf *);
+
+struct PartitionEntry
+{
+  char other[8];
+  u32 lba;
+  u32 n_sectors;
+};
+
+struct __attribute__((__packed__)) MBR
+{
+  char info[446];
+  struct PartitionEntry partition_entries[4];
+  char check[2];
+};

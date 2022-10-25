@@ -63,6 +63,20 @@ void sd_init()
      */
     sdInit();
     init_sleeplock(&sd_lock);
+
+    {
+        struct buf b = {
+            .flags = 0,
+            .blockno = 0,
+        };
+        sdrw(&b);
+        auto mbr_ptr = (struct MBR *)b.data;
+        ASSERT(mbr_ptr->check[0] == 0x55);
+        ASSERT(mbr_ptr->check[1] == 0xAA);
+
+        (void)(mbr_ptr->partition_entries[1].lba);       // LBA of first absolute sector in the partition 2
+        (void)(mbr_ptr->partition_entries[1].n_sectors); // Number of sectors in partition 2
+    }
 }
 
 /* Start the request for b. Caller must hold sdlock. */
