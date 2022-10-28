@@ -114,7 +114,7 @@ bool is_zombie(struct proc *p)
 // if the proc->state is RUNNING/RUNNABLE, do nothing
 // if the proc->state if SLEEPING/UNUSED, set the process state to RUNNABLE and add it to the sched queue
 // else: panic
-bool activate_proc(struct proc *p)
+bool _activate_proc(struct proc *p, bool onalert)
 {
     _acquire_sched_lock();
     bool ret;
