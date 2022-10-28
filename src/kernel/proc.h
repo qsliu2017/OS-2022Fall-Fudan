@@ -118,12 +118,11 @@ struct proc
 
 extern struct proc root_proc;
 
-// Allocate an unused proc with kstack, init most fields and hold its lock. Panic if no available proc.
-struct proc *create_proc();
+WARN_RESULT struct proc *create_proc();
 int start_proc(struct proc *, void (*entry)(u64), u64 arg);
 NO_RETURN void exit(int code);
-int wait(int *exitcode);
-int kill(int pid);
+WARN_RESULT int wait(int *exitcode);
+WARN_RESULT int kill(int pid);
 
 void dump_proc(struct proc const *p);
 
