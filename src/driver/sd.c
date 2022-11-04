@@ -183,21 +183,15 @@ void sdrw(buf *b)
     sd_start(b);
     if (write)
     {
-        while (arch_dsb_sy(), get_and_clear_EMMC_INTERRUPT() != INT_DATA_DONE)
-            arch_wfi();
+        sdWaitForInterrupt(INT_DATA_DONE);
     }
     else
     {
-        while (arch_dsb_sy(), get_and_clear_EMMC_INTERRUPT() != INT_READ_RDY)
-            arch_wfi();
+        sdWaitForInterrupt(INT_READ_RDY);
         u32 *buf = (u32 *)b->data;
         for (usize i = 0; i < sizeof(b->data) / sizeof(u32); i++)
-        {
-            arch_dsb_sy();
             buf[i] = get_EMMC_DATA();
-        }
-        while (arch_dsb_sy(), get_and_clear_EMMC_INTERRUPT() != INT_DATA_DONE)
-            arch_wfi();
+        sdWaitForInterrupt(INT_DATA_DONE);
     }
 }
 
