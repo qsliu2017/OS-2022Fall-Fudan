@@ -36,6 +36,8 @@ typedef struct {
     usize rm;
     usize ts;
     // hint: you may want to add something else here.
+
+    struct rb_root_ synced; // the list of all synced block, order by block_no, distinct
 } OpContext;
 
 typedef struct BlockCache {

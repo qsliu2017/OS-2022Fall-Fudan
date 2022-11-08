@@ -14,6 +14,11 @@ static struct rb_root_ root;
 static usize count;      // the number of all allocated in-memory block.
 static LogHeader header; // in-memory copy of log header block.
 
+static usize rm;             /* number of remain op */
+static usize uncommitted;    /* number of uncommitted op */
+static usize staged;         /* number of ended but not yet committed op */
+static Semaphore remain_ops; /* remain ops till next sync */
+
 static bool block_cmp(rb_node lnode, rb_node rnode)
 {
     return container_of(lnode, Block, rb_node)->block_no < container_of(rnode, Block, rb_node)->block_no;
@@ -22,7 +27,19 @@ static bool block_cmp(rb_node lnode, rb_node rnode)
 // hint: you may need some other variables. Just add them here.
 struct LOG
 {
+    struct rb_root_ staged; // the list of all staged block, order by block_no, distinct
 } log;
+
+typedef struct
+{
+    Block *block;
+    struct rb_node_ node;
+} BlockLog;
+
+static bool block_log_cmp(rb_node lnode, rb_node rnode)
+{
+    return container_of(lnode, BlockLog, node)->block->block_no < container_of(rnode, BlockLog, node)->block->block_no;
+}
 
 // read the content from disk.
 static INLINE void device_read(Block *block)
@@ -92,7 +109,6 @@ static Block *cache_acquire(usize block_no)
         {
             _for_in_reverse_dlist(ptr, &head)
             {
-        
                 Block *b = container_of(ptr, Block, node);
                 if (!b->acquired)
                 {
@@ -156,13 +172,43 @@ void init_bcache(const SuperBlock *_sblock, const BlockDevice *_device)
 
     init_spinlock(&lock);
     init_list_node(&head);
+    root.rb_node = NULL;
     count = 0;
+    {
+        read_header();
+        for (auto i = 0; i < header.num_blocks; i++)
+        {
+            Block b;
+            b.block_no = sblock->log_start + 1 + i;
+            device_read(&b);
+            b.block_no = header.block_no[i];
+            device_write(&b);
+        }
+        header.num_blocks = 0;
+        write_header();
+    }
+
+    rm = sblock->num_log_blocks;
+    uncommitted = 0;
+    staged = 0;
+    init_sem(&remain_ops, sblock->num_log_blocks / OP_MAX_NUM_BLOCKS);
 }
 
 // see `cache.h`.
 static void cache_begin_op(OpContext *ctx)
 {
-    // TODO
+
+    wait_sem(&remain_ops);
+
+    setup_checker(bcache);
+    acquire_spinlock(bcache, &lock);
+
+    ctx->rm = OP_MAX_NUM_BLOCKS;
+    rm -= OP_MAX_NUM_BLOCKS;
+    ctx->synced.rb_node = NULL;
+    uncommitted++;
+
+    release_spinlock(bcache, &lock);
 }
 
 // see `cache.h`.
@@ -173,12 +219,72 @@ static void cache_sync(OpContext *ctx, Block *block)
         device_write(block);
         return;
     }
+
+    setup_checker(bcache);
+    acquire_spinlock(bcache, &lock);
+
+    BlockLog *blog = kalloc(sizeof(BlockLog));
+    blog->block = block;
+
+    if (!_rb_lookup(&blog->node, &ctx->synced, block_log_cmp))
+    {
+        ASSERT(_rb_insert(&blog->node, &ctx->synced, block_log_cmp) == 0);
+        ASSERT(ctx->rm-- > 0);
+    }
+
+    release_spinlock(bcache, &lock);
 }
 
 // see `cache.h`.
 static void cache_end_op(OpContext *ctx)
 {
-    // TODO
+    setup_checker(bcache);
+    acquire_spinlock(bcache, &lock);
+
+    ctx->rm = OP_MAX_NUM_BLOCKS;
+    for (rb_node first; first = _rb_first(&ctx->synced);)
+    {
+        _rb_erase(first, &ctx->synced);
+        if (!_rb_lookup(first, &log.staged, block_log_cmp))
+        {
+            ASSERT(_rb_insert(first, &log.staged, block_log_cmp) == 0);
+            ctx->rm--;
+        }
+    }
+
+    if ((rm + ctx->rm) / OP_MAX_NUM_BLOCKS > rm / OP_MAX_NUM_BLOCKS)
+        post_sem(&remain_ops);
+    rm += ctx->rm;
+
+    if (++staged == uncommitted)
+    {
+        Block *block[LOG_MAX_SIZE];
+        header.num_blocks = 0;
+        for (rb_node first; first = _rb_first(&log.staged);)
+        {
+            _rb_erase(first, &log.staged);
+            auto i = header.num_blocks++;
+            BlockLog *blog = container_of(first, BlockLog, node);
+            block[i] = blog->block;
+            header.block_no[i] = block[i]->block_no;
+            device->write(sblock->log_start + 1 + i, block[i]->data);
+            kfree(blog);
+        }
+        write_header();
+        for (auto i = 0; i < header.num_blocks; i++)
+        {
+            device_write(block[i]);
+        }
+        header.num_blocks = 0;
+        write_header();
+
+        for (auto i = rm / OP_MAX_NUM_BLOCKS; i < sblock->num_log_blocks / OP_MAX_NUM_BLOCKS; i++)
+            post_sem(&remain_ops);
+        staged = uncommitted = 0;
+        rm = sblock->num_log_blocks;
+    }
+
+    release_spinlock(bcache, &lock);
 }
 
 // see `cache.h`.
