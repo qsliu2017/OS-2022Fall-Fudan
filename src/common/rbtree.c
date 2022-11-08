@@ -22,20 +22,20 @@ static inline void rb_set_parent(rb_node rb, rb_node p) {
 static inline void rb_set_parent_color(rb_node rb, rb_node p, int color) {
     rb->__rb_parent_color = (unsigned long)p | color;
 }
-static inline void __rb_change_child(rb_node old, rb_node new, rb_node parent, rb_root root) {
+static inline void __rb_change_child(rb_node old, rb_node _new, rb_node parent, rb_root root) {
     if (parent) {
         if (parent->rb_left == old)
-            parent->rb_left = new;
+            parent->rb_left = _new;
         else
-            parent->rb_right = new;
+            parent->rb_right = _new;
     } else
-        root->rb_node = new;
+        root->rb_node = _new;
 }
-static inline void __rb_rotate_set_parents(rb_node old, rb_node new, rb_root root, int color) {
+static inline void __rb_rotate_set_parents(rb_node old, rb_node _new, rb_root root, int color) {
     rb_node parent = rb_parent(old);
-    new->__rb_parent_color = old->__rb_parent_color;
-    rb_set_parent_color(old, new, color);
-    __rb_change_child(old, new, parent, root);
+    _new->__rb_parent_color = old->__rb_parent_color;
+    rb_set_parent_color(old, _new, color);
+    __rb_change_child(old, _new, parent, root);
 }
 static void __rb_insert_fix(rb_node node, rb_root root) {
     rb_node parent = rb_red_parent(node), gparent, tmp;
