@@ -1,5 +1,6 @@
 #pragma once
 #include <common/list.h>
+#include <common/rbtree.h>
 #include <common/sem.h>
 #include <fs/block_device.h>
 #include <fs/defines.h>
@@ -20,6 +21,7 @@ typedef struct {
     // of the block cache.
     usize block_no;
     ListNode node;
+    struct rb_node_ rb_node;
     bool acquired;   // is the block already acquired by some thread?
     bool pinned;     // if a block is pinned, it should not be evicted from the
                      // cache.

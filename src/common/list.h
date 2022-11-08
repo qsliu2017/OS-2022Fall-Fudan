@@ -26,6 +26,14 @@ ListNode* _detach_from_list(ListNode* node);
 #define _for_in_list(valptr, list) \
     for (ListNode* __flag = (list), *valptr = __flag->next; valptr; \
          valptr = valptr == __flag ? (void*)0 : valptr->next)
+// - walk through the dummy list excluding head
+#define _for_in_dlist(valptr, head) \
+    for (ListNode* __flag = (head), *valptr = __flag->next; valptr; \
+         valptr = (valptr->next) == __flag ? (void*)0 : valptr->next)
+// - walk through the dummy list reversely excluding head
+#define _for_in_reverse_dlist(valptr, head) \
+    for (ListNode* __flag = (head), *valptr = __flag->prev; valptr; \
+         valptr = (valptr->prev) == __flag ? (void*)0 : valptr->prev)
 // - test if the list is empty
 #define _empty_list(list) ((list)->next == (list))
 
