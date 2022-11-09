@@ -291,14 +291,41 @@ static void cache_end_op(OpContext *ctx)
 // hint: you can use `cache_acquire`/`cache_sync` to read/write blocks.
 static usize cache_alloc(OpContext *ctx)
 {
-    // TODO
+    for (usize i = sblock->num_blocks - sblock->num_data_blocks; i < sblock->num_blocks;)
+    {
+        Block *b = cache_acquire(sblock->bitmap_start + i / BIT_PER_BLOCK);
+        usize j = (i / BIT_PER_BLOCK + 1) * BIT_PER_BLOCK;
+
+        for (; i < j && i < sblock->num_blocks; i++)
+        {
+            if (!bitmap_get(b->data, i % BIT_PER_BLOCK))
+            {
+                bitmap_set(b->data, i % BIT_PER_BLOCK);
+                cache_sync(ctx, b);
+                cache_release(b);
+                b = cache_acquire(i);
+                memset(b->data, 0, BLOCK_SIZE);
+                cache_sync(ctx, b);
+                cache_release(b);
+                return i;
+            }
+        }
+
+        cache_release(b);
+    }
+
+    PANIC();
 }
 
 // see `cache.h`.
 // hint: you can use `cache_acquire`/`cache_sync` to read/write blocks.
 static void cache_free(OpContext *ctx, usize block_no)
 {
-    // TODO
+    Block *b = cache_acquire(sblock->bitmap_start + block_no / BIT_PER_BLOCK);
+    ASSERT(bitmap_get(b->data, block_no % BIT_PER_BLOCK));
+    bitmap_clear(b->data, block_no % BIT_PER_BLOCK);
+    cache_sync(ctx, b);
+    cache_release(b);
 }
 
 BlockCache bcache = {
