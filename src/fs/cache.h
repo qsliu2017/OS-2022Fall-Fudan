@@ -23,7 +23,7 @@ typedef struct {
     ListNode node;
     struct rb_node_ rb_node;
     bool acquired;   // is the block already acquired by some thread?
-    bool pinned;     // if a block is pinned, it should not be evicted from the
+    usize pinned;     // if a block is pinned, it should not be evicted from the
                      // cache.
     SleepLock lock;  // this lock protects `valid` and `data`.
     bool valid;      // is the content of block loaded from disk?

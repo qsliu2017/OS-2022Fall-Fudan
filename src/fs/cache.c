@@ -8,16 +8,15 @@
 static const SuperBlock *sblock;
 static const BlockDevice *device;
 
-static SpinLock lock; // protects block cache.
-static ListNode head; // the list of all allocated in-memory block.
-static struct rb_root_ root;
-static usize count;      // the number of all allocated in-memory block.
-static LogHeader header; // in-memory copy of log header block.
+static SpinLock lock;        // protects block cache.
+static ListNode head;        // the list of all allocated in-memory block, sort by LRU.
+static struct rb_root_ root; // the rbtree of all allocated in-memory block, sort by block_no.
+static usize count;          // the number of all allocated in-memory block.
+static LogHeader header;     // in-memory copy of log header block.
 
-static usize rm;             /* number of remain op */
-static usize uncommitted;    /* number of uncommitted op */
-static usize staged;         /* number of ended but not yet committed op */
-static Semaphore remain_ops; /* remain ops till next sync */
+static usize rm;             // number of remain op
+static usize uncommitted;    // number of uncommitted op
+static Semaphore remain_ops; // remain ops till next sync
 
 static bool block_cmp(rb_node lnode, rb_node rnode)
 {
@@ -71,7 +70,7 @@ static void init_block(Block *block)
     block->block_no = 0;
     init_list_node(&block->node);
     block->acquired = false;
-    block->pinned = false;
+    block->pinned = 0;
 
     init_sleeplock(&block->lock);
     block->valid = false;
@@ -100,6 +99,13 @@ static Block *cache_acquire(usize block_no)
     if (block)
     {
         block = container_of(block, Block, rb_node);
+        while (block->acquired)
+        {
+            block->pinned++;
+            _release_spinlock(&lock);
+            _acquire_spinlock(&lock);
+            block->pinned--;
+        }
         wait_sem(&block->lock);
     }
 
@@ -110,7 +116,7 @@ static Block *cache_acquire(usize block_no)
             _for_in_reverse_dlist(ptr, &head)
             {
                 Block *b = container_of(ptr, Block, node);
-                if (!b->acquired)
+                if (!b->acquired && !b->pinned)
                 {
                     block = b;
                     break;
@@ -153,7 +159,7 @@ static void cache_release(Block *block)
 
     block->acquired = false;
     post_sem(&block->lock);
-    if (count > EVICTION_THRESHOLD)
+    if (count > EVICTION_THRESHOLD && !block->pinned)
     {
         _detach_from_list(&block->node);
         _rb_erase(&block->rb_node, &root);
@@ -188,10 +194,9 @@ void init_bcache(const SuperBlock *_sblock, const BlockDevice *_device)
         write_header();
     }
 
-    rm = sblock->num_log_blocks;
+    rm = MIN(sblock->num_log_blocks, LOG_MAX_SIZE);
     uncommitted = 0;
-    staged = 0;
-    init_sem(&remain_ops, sblock->num_log_blocks / OP_MAX_NUM_BLOCKS);
+    init_sem(&remain_ops, rm / OP_MAX_NUM_BLOCKS);
 }
 
 // see `cache.h`.
@@ -223,6 +228,7 @@ static void cache_sync(OpContext *ctx, Block *block)
     setup_checker(bcache);
     acquire_spinlock(bcache, &lock);
 
+    block->pinned++;
     BlockLog *blog = kalloc(sizeof(BlockLog));
     blog->block = block;
 
@@ -230,6 +236,10 @@ static void cache_sync(OpContext *ctx, Block *block)
     {
         ASSERT(_rb_insert(&blog->node, &ctx->synced, block_log_cmp) == 0);
         ASSERT(ctx->rm-- > 0);
+    }
+    else
+    {
+        kfree(blog);
     }
 
     release_spinlock(bcache, &lock);
@@ -256,10 +266,10 @@ static void cache_end_op(OpContext *ctx)
         post_sem(&remain_ops);
     rm += ctx->rm;
 
-    if (++staged == uncommitted)
+    if (--uncommitted == 0)
     {
         Block *block[LOG_MAX_SIZE];
-        header.num_blocks = 0;
+        ASSERT(header.num_blocks == 0);
         for (rb_node first; first = _rb_first(&log.staged);)
         {
             _rb_erase(first, &log.staged);
@@ -274,14 +284,14 @@ static void cache_end_op(OpContext *ctx)
         for (auto i = 0; i < header.num_blocks; i++)
         {
             device_write(block[i]);
+            block[i]->pinned--;
         }
         header.num_blocks = 0;
         write_header();
 
-        for (auto i = rm / OP_MAX_NUM_BLOCKS; i < sblock->num_log_blocks / OP_MAX_NUM_BLOCKS; i++)
+        for (auto i = rm / OP_MAX_NUM_BLOCKS; i < MIN(sblock->num_log_blocks, LOG_MAX_SIZE) / OP_MAX_NUM_BLOCKS; i++)
             post_sem(&remain_ops);
-        staged = uncommitted = 0;
-        rm = sblock->num_log_blocks;
+        rm = MIN(sblock->num_log_blocks, LOG_MAX_SIZE);
     }
 
     release_spinlock(bcache, &lock);
