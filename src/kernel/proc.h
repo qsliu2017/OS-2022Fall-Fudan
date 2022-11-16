@@ -5,6 +5,7 @@
 #include <common/sem.h>
 #include <kernel/schinfo.h>
 #include <kernel/pt.h>
+#include <kernel/container.h>
 
 enum procstate
 {
@@ -12,6 +13,7 @@ enum procstate
     RUNNABLE,
     RUNNING,
     SLEEPING,
+    DEEPSLEEPING,
     ZOMBIE
 };
 
@@ -108,12 +110,14 @@ struct proc
     /* Shared fields. Should hold proc lock first. */
 
     bool killed;
+    int localpid;
     int exitcode;
     enum procstate state;
     Semaphore childexit;
     ListNode children;
     struct proc *parent;
     ListNode sibling;
+    struct container *container;
 };
 
 extern struct proc root_proc;
@@ -121,8 +125,10 @@ extern struct proc root_proc;
 WARN_RESULT struct proc *create_proc();
 int start_proc(struct proc *, void (*entry)(u64), u64 arg);
 NO_RETURN void exit(int code);
-WARN_RESULT int wait(int *exitcode);
+WARN_RESULT int wait(int *exitcode, int *pid);
 WARN_RESULT int kill(int pid);
+
+void set_parent_to_this(struct proc *);
 
 void dump_proc(struct proc const *p);
 

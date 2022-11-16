@@ -81,9 +81,15 @@ struct proc *thisproc()
     return cpus[cpuid()].sched.running;
 }
 
-void init_schinfo(struct schinfo *p)
+void init_schinfo(struct schinfo *p, bool group)
 {
     init_list_node(&p->list);
+    (void)(group);
+}
+
+void init_schqueue(struct schqueue *p)
+{
+    (void)(p);
 }
 
 volatile bool SCHED_DEBUG = false;
@@ -111,11 +117,18 @@ bool is_zombie(struct proc *p)
     return r;
 }
 
+void activate_group(struct container *group)
+{
+    (void)(group);
+    // TODO: add the schinfo node of the group to the schqueue of its parent
+}
+
 // if the proc->state is RUNNING/RUNNABLE, do nothing
 // if the proc->state if SLEEPING/UNUSED, set the process state to RUNNABLE and add it to the sched queue
 // else: panic
 bool _activate_proc(struct proc *p, bool onalert)
 {
+    (void)(onalert);
     _acquire_sched_lock();
     bool ret;
     switch (p->state)

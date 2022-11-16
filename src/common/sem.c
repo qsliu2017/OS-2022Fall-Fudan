@@ -102,7 +102,7 @@ void _post_sem(Semaphore* sem)
 
 SleepLock *_raii_acquire_sleeplock(SleepLock *lock)
 {
-    wait_sem(lock);
+    unalertable_wait_sem(lock);
     return lock;
 }
 

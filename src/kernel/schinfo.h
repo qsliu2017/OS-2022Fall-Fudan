@@ -8,3 +8,10 @@ struct schinfo
 {
     ListNode list;
 };
+
+// embedded data for containers
+struct schqueue
+{
+    // TODO: customize your sched queue
+    
+};

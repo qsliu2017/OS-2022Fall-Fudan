@@ -301,7 +301,7 @@ void sd_parallel_test()
             start_proc(proc, _parallel_sd_test_entry, p);
         }
         for (int p = 0; p < N_THREAD; p++)
-            wait_sem(&_parallel_sem);
+            unalertable_wait_sem(&_parallel_sem);
         t = 0;
         for (int p = 0; p < N_THREAD; p++)
         {

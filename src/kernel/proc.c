@@ -29,7 +29,7 @@ static inline void init_proc(struct proc *p)
 
     /* init sched.c */
 
-    init_schinfo(&p->schinfo);
+    init_schinfo(&p->schinfo, false);
 
     /* init shared fields */
 
@@ -137,7 +137,7 @@ NO_RETURN void exit(int code)
     PANIC(); // prevent the warning of 'no_return function returns'
 }
 
-int wait(int *exitcode)
+int wait(int *exitcode, int *pid)
 {
     raii_acquire_spinlock(&proc_lock, 0);
     auto this = thisproc();
@@ -167,10 +167,10 @@ int wait(int *exitcode)
     free_pgdir(&child->pgdir);
     ASSERT(&child->kstack);
     kfree_page(&child->kstack);
-    int pid = child->pid;
+    *pid = child->pid;
     kfree(child);
 
-    return pid;
+    return 0;
 }
 
 int kill(int pid)

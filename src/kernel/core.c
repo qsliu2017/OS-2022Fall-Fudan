@@ -26,10 +26,10 @@ NO_RETURN void kernel_entry() {
     set_cpu_on();
     printk("hello world %d\n", (int)sizeof(struct proc));
 
-    // proc_test();
-    // vm_test();
-    // user_proc_test();
-    sd_test();
+    proc_test();
+    user_proc_test();
+    container_test();
+    // sd_test();
     
     do_rest_init();
 
