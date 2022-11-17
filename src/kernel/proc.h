@@ -73,12 +73,6 @@ typedef struct KernelContext
 
 } KernelContext;
 
-// ProcLock is spinlock hold by process(thread)
-typedef struct
-{
-    struct proc *volatile holder;
-} ProcLock;
-
 struct proc
 {
     /* Constant fields */
@@ -119,22 +113,3 @@ WARN_RESULT int kill(int pid);
 void set_parent_to_this(struct proc *);
 
 void dump_proc(struct proc const *p);
-
-void init_proclock(ProcLock *);
-
-// Non-block acquire proc lock, return true on success. Panic if already hold by thisproc().
-bool _try_acq_proclock(ProcLock *);
-// Block acquire proc lock. Panic if already hold by thisproc().
-void _acq_proclock(ProcLock *);
-// Release proc lock. Panic if not hold by thisproc().
-void _rel_proclock(ProcLock *);
-
-// Do NOT use this. Use raii_acq_proclock instead.
-ProcLock *__raii_acq_proclock(ProcLock *);
-// Do NOT use this.
-void __raii_rel_proclock(ProcLock **);
-// Block acquire proc lock, release when the scope goes out.
-#define raii_acq_proclock(lock, id) ProcLock *__proclock_##id __attribute__((__cleanup__(__raii_rel_proclock))) = __raii_acq_proclock(lock)
-
-// Return true if thisproc() is holding lock
-bool holding_proclock(ProcLock *);
