@@ -93,3 +93,5 @@ NO_INLINE NO_RETURN void _panic(const char*, int);
         if (!(expr)) \
             PANIC(); \
     })
+
+#define UNUSE(var) (void)(var)

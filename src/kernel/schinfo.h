@@ -1,17 +1,31 @@
 #pragma once
 
-#include <common/list.h>
+#include <common/rbtree.h>
 struct proc; // dont include proc.h here
+
+enum procstate
+{
+    UNUSED,
+    RUNNABLE,
+    RUNNING,
+    SLEEPING,
+    DEEPSLEEPING,
+    ZOMBIE
+};
 
 // embeded data for procs
 struct schinfo
 {
-    ListNode list;
+    struct rb_node_ sch_node;
+
+    enum procstate state;
+    u64 vruntime;
+    bool group;
 };
 
 // embedded data for containers
 struct schqueue
 {
-    // TODO: customize your sched queue
-    
+    struct scheduler *scheduler;
+    struct rb_root_ sch_root;
 };

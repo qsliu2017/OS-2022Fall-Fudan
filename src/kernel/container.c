@@ -23,7 +23,8 @@ void init_container(struct container *container)
     container->rootproc = NULL;
     init_schinfo(&container->schinfo, true);
     init_schqueue(&container->schqueue);
-    // TODO: initialize namespace (local pid allocator)
+
+    container->localpid = 0;
 }
 
 struct container *create_container(void (*root_entry)(), u64 arg)
@@ -32,6 +33,11 @@ struct container *create_container(void (*root_entry)(), u64 arg)
     (void)(root_entry);
     (void)(arg);
     return NULL;
+}
+
+int next_localpid(struct container *container)
+{
+    return __atomic_fetch_add(&container->localpid, 1, __ATOMIC_RELAXED);
 }
 
 define_early_init(root_container)

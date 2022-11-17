@@ -7,16 +7,6 @@
 #include <kernel/pt.h>
 #include <kernel/container.h>
 
-enum procstate
-{
-    UNUSED,
-    RUNNABLE,
-    RUNNING,
-    SLEEPING,
-    DEEPSLEEPING,
-    ZOMBIE
-};
-
 typedef struct UserContext
 {
     /* When an exception causes a mode change, the core automatically
@@ -94,7 +84,7 @@ struct proc
     /* Constant fields */
 
     int pid;
-    bool idle;
+    int localpid;
 
     /* Private fields */
 
@@ -110,9 +100,7 @@ struct proc
     /* Shared fields. Should hold proc lock first. */
 
     bool killed;
-    int localpid;
     int exitcode;
-    enum procstate state;
     Semaphore childexit;
     ListNode children;
     struct proc *parent;

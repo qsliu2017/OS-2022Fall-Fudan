@@ -1,3 +1,4 @@
+#include <kernel/container.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
 #include <kernel/proc.h>
@@ -18,7 +19,6 @@ static inline void init_proc(struct proc *p)
 
     static volatile int pid = 0;
     p->pid = __atomic_fetch_add(&pid, 1, __ATOMIC_RELAXED); /* atomic next pid */
-    p->idle = false;
 
     /* init private fields */
 
@@ -38,6 +38,7 @@ static inline void init_proc(struct proc *p)
     init_list_node(&p->children);
     p->parent = NULL;
     init_list_node(&p->sibling);
+    p->container = &root_container;
 }
 
 define_early_init(root_proc)
@@ -49,7 +50,6 @@ define_early_init(root_proc)
     init_proc(rp);
 
     rp->parent = rp;
-    rp->state = RUNNING;
 }
 
 struct proc *create_proc()
@@ -104,25 +104,30 @@ int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
     p->kcontext->x29 = (u64)p->kcontext;
     p->kcontext->x30 = (u64)proc_entry;
 
+    p->localpid = next_localpid(p->container);
+
     // activate the proc and return its pid
     activate_proc(p);
 
-    return p->pid;
+    return p->localpid;
 }
 
 NO_RETURN void exit(int code)
 {
     _acquire_spinlock(&proc_lock);
     auto this = thisproc();
+    auto root = this->container->rootproc;
+
+    ASSERT(this != root);
 
     while (!_empty_list(&this->children))
     {
         struct proc *child = container_of(this->children.next, struct proc, sibling);
         _detach_from_list(&child->sibling);
-        _merge_list(&root_proc.children, &child->sibling);
-        child->parent = &root_proc;
-        if (child->state == ZOMBIE)
-            post_sem(&root_proc.childexit);
+        _merge_list(&root->children, &child->sibling);
+        child->parent = root;
+        if (is_zombie(child))
+            post_sem(&root->childexit);
     }
 
     auto parent = this->parent;
@@ -170,7 +175,7 @@ int wait(int *exitcode, int *pid)
     *pid = child->pid;
     kfree(child);
 
-    return 0;
+    return child->localpid;
 }
 
 int kill(int pid)
@@ -199,20 +204,16 @@ void dump_proc(struct proc const *p)
         "struct proc\n"
         "{\n"
         "    bool killed = %d;\n"
-        "    bool idle = %d;\n"
         "    int pid = %d;\n"
         "    int exitcode = %d;\n"
-        "    enum procstate state = %d;\n"
         "    struct proc *parent = %p;\n"
         "    void *kstack = %p;\n"
         "    UserContext *ucontext = %p;\n"
         "    KernelContext *kcontext = %p;\n"
         "};\n",
         p->killed,
-        p->idle,
         p->pid,
         p->exitcode,
-        p->state,
         p->parent,
         p->kstack,
         p->ucontext,
