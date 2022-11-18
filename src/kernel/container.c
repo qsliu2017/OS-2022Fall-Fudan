@@ -3,11 +3,11 @@
 #include <kernel/container.h>
 #include <kernel/init.h>
 #include <kernel/printk.h>
+#include <kernel/proc.h>
 #include <kernel/mem.h>
 #include <kernel/sched.h>
 
 struct container root_container, idle_container;
-extern struct proc root_proc;
 
 void activate_group(struct container *group);
 
@@ -44,5 +44,5 @@ int next_localpid(struct container *container)
 define_early_init(root_container)
 {
     init_container(&root_container);
-    root_container.rootproc = &root_proc;
+    root_container.rootproc = get_root_proc();
 }

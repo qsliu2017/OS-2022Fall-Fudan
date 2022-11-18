@@ -2,10 +2,13 @@
 
 #include <common/defines.h>
 #include <common/list.h>
+#include <common/rbtree.h>
 #include <common/sem.h>
 #include <kernel/schinfo.h>
 #include <kernel/pt.h>
 #include <kernel/container.h>
+
+#define NPROC 128
 
 typedef struct UserContext
 {
@@ -77,7 +80,6 @@ struct proc
 {
     /* Constant fields */
 
-    int pid;
     int localpid;
 
     /* Private fields */
@@ -96,13 +98,24 @@ struct proc
     bool killed;
     int exitcode;
     Semaphore childexit;
-    ListNode children;
     struct proc *parent;
-    ListNode sibling;
+    struct rb_root_ child_root;
+    struct rb_root_ exit_root;
+    struct rb_node_ node; // owned by free rb_tree or parent
     struct container *container;
 };
 
-extern struct proc root_proc;
+extern struct proc procs[NPROC];
+
+inline int get_pid(struct proc const *p)
+{
+    return p - procs;
+}
+
+inline struct proc *get_root_proc()
+{
+    return &procs[0];
+}
 
 WARN_RESULT struct proc *create_proc();
 int start_proc(struct proc *, void (*entry)(u64), u64 arg);

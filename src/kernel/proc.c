@@ -5,20 +5,47 @@
 #include <kernel/pt.h>
 #include <kernel/sched.h>
 #include <common/list.h>
+#include <common/rbtree.h>
 #include <common/string.h>
 #include <kernel/printk.h>
-
-struct proc root_proc;
 
 /* Public lock for proc tree */
 static SpinLock proc_lock;
 
-static inline void init_proc(struct proc *p)
-{
-    /* init constant fields */
+struct proc procs[NPROC];
 
-    static volatile int pid = 0;
-    p->pid = __atomic_fetch_add(&pid, 1, __ATOMIC_RELAXED); /* atomic next pid */
+/* UNUSED procs rbtree root */
+static struct rb_root_ free_root;
+
+static bool __proc_cmp(rb_node lnode, rb_node rnode)
+{
+    return lnode < rnode;
+}
+
+define_early_init(root_proc)
+{
+    init_spinlock(&proc_lock);
+    for (int i = 0; i < NPROC; i++)
+    {
+        ASSERT(!_rb_insert(&procs[i].node, &free_root, __proc_cmp));
+    }
+
+    auto rp = create_proc();
+    ASSERT(rp == get_root_proc());
+
+    rp->parent = rp;
+}
+
+struct proc *create_proc()
+{
+    raii_acquire_spinlock(&proc_lock, create_proc);
+
+    auto first = _rb_first(&free_root);
+    ASSERT(first);
+    _rb_erase(first, &free_root);
+    struct proc *p = container_of(first, struct proc, node);
+
+    memset(p, 0, sizeof(*p));
 
     /* init private fields */
 
@@ -31,37 +58,19 @@ static inline void init_proc(struct proc *p)
 
     p->killed = false;
     init_sem(&p->childexit, 0);
-    init_list_node(&p->children);
     p->parent = NULL;
-    init_list_node(&p->sibling);
     p->container = &root_container;
-}
 
-define_early_init(root_proc)
-{
-    init_spinlock(&proc_lock);
-
-    auto rp = &root_proc;
-
-    init_proc(rp);
-
-    rp->parent = rp;
-}
-
-struct proc *create_proc()
-{
-    struct proc *p = kalloc(sizeof(struct proc));
-
-    init_proc(p);
     return p;
 }
 
 void set_parent_to_this(struct proc *proc)
 {
-    raii_acquire_spinlock(&proc_lock, 0);
+    raii_acquire_spinlock(&proc_lock, set_parent_to_this);
+
     auto this = thisproc();
     proc->parent = this;
-    _merge_list(&this->children, &proc->sibling);
+    ASSERT(!_rb_insert(&proc->node, &this->child_root, __proc_cmp));
 }
 
 void proc_entry()
@@ -75,11 +84,13 @@ void proc_entry()
 
 int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
 {
-    raii_acquire_spinlock(&proc_lock, 0);
-    if (p->parent == NULL)
+    raii_acquire_spinlock(&proc_lock, start_proc);
+
+    if (!p->parent)
     {
-        p->parent = &root_proc;
-        _merge_list(&root_proc.children, &p->sibling);
+        auto root = get_root_proc();
+        p->parent = root;
+        ASSERT(!_rb_insert(&p->node, &root->child_root, __proc_cmp));
     }
 
     /* init sched.c */
@@ -109,17 +120,26 @@ NO_RETURN void exit(int code)
 
     ASSERT(this != root);
 
-    while (!_empty_list(&this->children))
+    for (rb_node first; (first = _rb_first(&this->child_root));)
     {
-        struct proc *child = container_of(this->children.next, struct proc, sibling);
-        _detach_from_list(&child->sibling);
-        _merge_list(&root->children, &child->sibling);
+        struct proc *child = container_of(first, struct proc, node);
+        _rb_erase(first, &this->child_root);
         child->parent = root;
-        if (is_zombie(child))
-            post_sem(&root->childexit);
+        ASSERT(!_rb_insert(first, &root->child_root, __proc_cmp));
+    }
+
+    for (rb_node first; (first = _rb_first(&this->exit_root));)
+    {
+        struct proc *child = container_of(first, struct proc, node);
+        _rb_erase(first, &this->exit_root);
+        child->parent = root;
+        ASSERT(!_rb_insert(first, &root->exit_root, __proc_cmp));
+        post_sem(&root->childexit);
     }
 
     auto parent = this->parent;
+    _rb_erase(&this->node, &parent->child_root);
+    ASSERT(!_rb_insert(&this->node, &parent->exit_root, __proc_cmp));
     this->exitcode = code;
     post_sem(&parent->childexit);
 
@@ -133,58 +153,48 @@ NO_RETURN void exit(int code)
 
 int wait(int *exitcode, int *pid)
 {
-    raii_acquire_spinlock(&proc_lock, 0);
+    raii_acquire_spinlock(&proc_lock, wait);
+
     auto this = thisproc();
 
-    if (_empty_list(&this->children))
+    if (!_rb_first(&this->child_root) && !_rb_first(&this->exit_root))
         return -1;
 
     _release_spinlock(&proc_lock);
     ASSERT(wait_sem(&this->childexit));
     _acquire_spinlock(&proc_lock);
 
-    struct proc *child = NULL;
-    _for_in_list(ptr, &this->children)
-    {
-        struct proc *_child = container_of(ptr, struct proc, sibling);
-        if (is_zombie(_child))
-        {
-            child = _child;
-            break;
-        }
-    }
+    auto first = _rb_first(&this->exit_root);
+    ASSERT(first);
+    struct proc *child = container_of(first, struct proc, node);
+    ASSERT(is_zombie(child));
 
-    ASSERT(child != NULL);
-
-    _detach_from_list(&child->sibling);
+    _rb_erase(&child->node, &this->exit_root);
     *exitcode = child->exitcode;
     free_pgdir(&child->pgdir);
-    ASSERT(&child->kstack);
-    kfree_page(&child->kstack);
-    *pid = child->pid;
-    kfree(child);
+    ASSERT(child->kstack);
+    kfree_page(child->kstack);
+    *pid = get_pid(child);
+
+    ASSERT(!_rb_insert(&child->node, &free_root, __proc_cmp));
 
     return child->localpid;
 }
 
 int kill(int pid)
 {
-    // TODO
-    // Set the killed flag of the proc to true and return 0.
-    // Return -1 if the pid is invalid (proc not found).
-    raii_acquire_spinlock(&proc_lock, 0);
-    auto this = thisproc();
-    _for_in_list(ptr, &this->children)
-    {
-        struct proc *child = container_of(ptr, struct proc, sibling);
-        if (child->pid == pid)
-        {
-            child->killed = true;
-            activate_proc(child);
-            return 0;
-        }
-    }
-    return -1;
+    ASSERT(0 < pid && pid < NPROC);
+    raii_acquire_spinlock(&proc_lock, kill);
+
+    auto p = &procs[pid];
+    ASSERT(p->container->rootproc != p);
+
+    if (_rb_lookup(&p->node, &free_root, __proc_cmp))
+        return -1;
+
+    p->killed = true;
+    alert_proc(p);
+    return 0;
 }
 
 void dump_proc(struct proc const *p)
@@ -201,7 +211,7 @@ void dump_proc(struct proc const *p)
         "    KernelContext *kcontext = %p;\n"
         "};\n",
         p->killed,
-        p->pid,
+        get_pid(p),
         p->exitcode,
         p->parent,
         p->kstack,

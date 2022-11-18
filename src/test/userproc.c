@@ -50,11 +50,11 @@ define_syscall(myreport, u64 id)
 {
     ASSERT(id < 22);
     ASSERT(thisproc()->localpid == localpids[id]);
-    ASSERT(thisproc()->pid == pids[id]);
+    ASSERT(get_pid(thisproc()) == pids[id]);
     if (stop)
         return 0;
     if (proc_cnt[id] == 0)
-        printk("proc %llu: pid=%d localpid=%d\n", id, thisproc()->pid, thisproc()->localpid);
+        printk("proc %llu: pid=%d localpid=%d\n", id, get_pid(thisproc()), thisproc()->localpid);
     proc_cnt[id]++;
     cpu_cnt[cpuid()]++;
     if (proc_cnt[id] > 21000)
@@ -77,7 +77,7 @@ static void _create_user_proc(int i)
     p->ucontext->elr = 0x400000;
     // p->ucontext->ttbr0 = K2P(p->pgdir.pt);
     p->ucontext->spsr = 0;
-    pids[i] = p->pid;
+    pids[i] = get_pid(p);
     set_parent_to_this(p);
     set_container_to_this(p);
     localpids[i] = start_proc(p, trap_return, 0);

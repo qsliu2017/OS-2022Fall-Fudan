@@ -39,7 +39,7 @@ define_init(sched)
         timer->handler = sched_timer_handler;
     }
 
-    start_proc(&root_proc, kernel_entry, 0);
+    start_proc(get_root_proc(), kernel_entry, 0);
 }
 
 struct proc *thisproc()
