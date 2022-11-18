@@ -1,0 +1,30 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Qemu: debug",
+			"command": "make qemu-debug",
+			"isBackground": true,
+			"options": {
+				"cwd": "${workspaceFolder}/build",
+			},
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^\\[100%\\]",
+					"line": 1,
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "^\\[100%\\]",
+					"endsPattern": "^\\[100%\\]",
+				},
+			},
+		},
+		{
+			"type": "shell",
+			"label": "Qemu: kill",
+			"command": "pkill qemu-system",
+		},
+	]
+}
