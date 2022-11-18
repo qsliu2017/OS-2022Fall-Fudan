@@ -22,14 +22,10 @@ static inline void init_proc(struct proc *p)
 
     /* init private fields */
 
-    p->pgdir.pt = NULL;
-    p->kstack = NULL;
-    p->ucontext = NULL;
-    p->kcontext = NULL;
-
-    /* init sched.c */
-
-    init_schinfo(&p->schinfo, false);
+    init_pgdir(&p->pgdir);
+    p->kstack = kalloc_page();
+    p->ucontext = p->kstack + PAGE_SIZE - sizeof(UserContext);
+    p->kcontext = (void *)p->ucontext - sizeof(KernelContext);
 
     /* init shared fields */
 
@@ -57,12 +53,6 @@ struct proc *create_proc()
     struct proc *p = kalloc(sizeof(struct proc));
 
     init_proc(p);
-
-    init_pgdir(&p->pgdir);
-    p->kstack = kalloc_page();
-    p->ucontext = p->kstack + PAGE_SIZE - sizeof(UserContext);
-    p->kcontext = (void *)p->ucontext - sizeof(KernelContext);
-
     return p;
 }
 
@@ -91,10 +81,9 @@ int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
         p->parent = &root_proc;
         _merge_list(&root_proc.children, &p->sibling);
     }
-    else
-    {
-        ASSERT(p->parent == thisproc());
-    }
+
+    /* init sched.c */
+    p->container->schqueue.scheduler->init_schinfo(&p->schinfo, false);
 
     // setup the kcontext to make the proc start with proc_entry(entry, arg)
     ASSERT(p->kstack != NULL);

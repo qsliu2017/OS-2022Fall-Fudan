@@ -5,8 +5,10 @@
 
 #define RR_TIME 1000
 
-struct scheduler
+struct scheduler_
 {
+  void (*init_schinfo)(struct schinfo *, bool group);
+  void (*init_schqueue)(struct schqueue *);
   void (*update_old)(struct proc *, enum procstate);
   struct proc *(*pick_next)();
   void (*update_new)(struct proc *);
@@ -14,7 +16,9 @@ struct scheduler
   void (*activacte_group)(struct container *);
 };
 
-extern const struct scheduler cfs_scheduler;
+typedef struct scheduler_ const *scheduler;
+
+extern struct scheduler_ cfs_scheduler, idle_scheduler;
 
 void init_schinfo(struct schinfo *, bool group);
 void init_schqueue(struct schqueue *);

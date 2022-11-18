@@ -14,7 +14,7 @@ struct container
     int localpid;
 };
 
-extern struct container root_container;
+extern struct container root_container, idle_container;
 
 struct container *create_container(void (*root_entry)(), u64 arg);
 void set_container_to_this(struct proc *);

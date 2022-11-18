@@ -8,8 +8,7 @@
 bool panic_flag;
 
 NO_RETURN void idle_entry() {
-    if (cpuid()) // cpu 0 has set cpu on in kernel_entry`V
-        set_cpu_on();
+    set_cpu_on();
     while (1) {
         yield();
         if (panic_flag)
@@ -23,7 +22,6 @@ NO_RETURN void idle_entry() {
 }
 
 NO_RETURN void kernel_entry() {
-    set_cpu_on();
     printk("hello world %d\n", (int)sizeof(struct proc));
 
     proc_test();

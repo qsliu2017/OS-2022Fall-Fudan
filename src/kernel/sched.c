@@ -14,7 +14,8 @@ extern bool panic_flag;
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 extern NO_RETURN void idle_entry(u64);
-extern void proc_entry();
+extern NO_RETURN void kernel_entry(u64);
+extern NO_RETURN void proc_entry();
 
 /* Public lock for sched */
 static SpinLock sched_lock;
@@ -23,29 +24,22 @@ define_init(sched)
 {
     init_spinlock(&sched_lock);
 
+    idle_container.schqueue.scheduler = &idle_scheduler;
     for (auto i = 0; i < NCPU; i++)
     {
-        auto idle = &cpus[i].sched.idle;
-        idle->pid = -1;
-        idle->pgdir.pt = NULL;
+        auto sched = &cpus[i].sched;
 
+        auto idle = &sched->idle;
+        idle->container = &idle_container;
+        idle->schinfo.state = RUNNING;
         cpus[i].sched.running = idle;
 
-        auto timer = &cpus[i].sched.sched_timer;
+        auto timer = &sched->sched_timer;
         timer->elapse = 89;
         timer->handler = sched_timer_handler;
     }
-    {
-        // Ugly trick to fix idle0
-        auto idle = &cpus[0].sched.idle;
-        idle->kstack = kalloc_page();
-        idle->ucontext = idle->kstack + PAGE_SIZE - sizeof(UserContext);
-        idle->kcontext = (void *)idle->ucontext - sizeof(KernelContext);
-        idle->kcontext->x19 = (u64)idle_entry;
-        idle->kcontext->x29 = (u64)idle->kcontext;
-        idle->kcontext->x30 = (u64)proc_entry;
-    }
-    cpus[0].sched.running = &root_proc;
+
+    start_proc(&root_proc, kernel_entry, 0);
 }
 
 struct proc *thisproc()
@@ -55,13 +49,12 @@ struct proc *thisproc()
 
 void init_schinfo(struct schinfo *p, bool group)
 {
-    memset(p, 0, sizeof(*p));
-    p->group = group;
+    cfs_scheduler.init_schinfo(p, group);
 }
 
 void init_schqueue(struct schqueue *p)
 {
-    memset(p, 0, sizeof(*p));
+    cfs_scheduler.init_schqueue(p);
 }
 
 void _acquire_sched_lock()
@@ -83,12 +76,12 @@ bool is_zombie(struct proc *p)
     return r;
 }
 
-static inline struct scheduler *__group_scheduler(struct container *c)
+static inline scheduler __group_scheduler(struct container *c)
 {
     return c->schqueue.scheduler;
 }
 
-static inline struct scheduler *__proc_scheduler(struct proc *p)
+static inline scheduler __proc_scheduler(struct proc *p)
 {
     return __group_scheduler(p->container);
 }
@@ -116,6 +109,19 @@ bool is_unused(struct proc *p)
     r = p->schinfo.state == UNUSED;
     _release_sched_lock();
     return r;
+}
+
+static void idle_init_schinfo(struct schinfo *p, bool group)
+{
+    memset(p, 0, sizeof(*p));
+    UNUSE(group);
+    p->state = RUNNING;
+}
+
+static void idle_init_schqueue(struct schqueue *p)
+{
+    memset(p, 0, sizeof(*p));
+    p->scheduler = &idle_scheduler;
 }
 
 static void idle_update_old(struct proc *p, enum procstate new_state)
@@ -148,7 +154,9 @@ static void idle_activacte_group(struct container *c)
     PANIC();
 }
 
-static const struct scheduler idle_scheduler = {
+struct scheduler_ idle_scheduler = {
+    .init_schinfo = idle_init_schinfo,
+    .init_schqueue = idle_init_schqueue,
     .update_old = idle_update_old,
     .pick_next = idle_pick_next,
     .update_new = idle_update_new,
@@ -156,7 +164,7 @@ static const struct scheduler idle_scheduler = {
     .activacte_group = idle_activacte_group,
 };
 
-static const struct scheduler *const sched_q[] = {&cfs_scheduler, &idle_scheduler};
+static const scheduler sched_q[] = {&cfs_scheduler, &idle_scheduler};
 
 // A simple scheduler.
 // You are allowed to replace it with whatever you like.

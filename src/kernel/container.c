@@ -6,7 +6,7 @@
 #include <kernel/mem.h>
 #include <kernel/sched.h>
 
-struct container root_container;
+struct container root_container, idle_container;
 extern struct proc root_proc;
 
 void activate_group(struct container *group);
@@ -19,20 +19,21 @@ void set_container_to_this(struct proc *proc)
 void init_container(struct container *container)
 {
     memset(container, 0, sizeof(struct container));
-    container->parent = NULL;
+    container->parent = &root_container;
     container->rootproc = NULL;
     init_schinfo(&container->schinfo, true);
     init_schqueue(&container->schqueue);
-
-    container->localpid = 0;
 }
 
 struct container *create_container(void (*root_entry)(), u64 arg)
 {
-    // TODO
-    (void)(root_entry);
-    (void)(arg);
-    return NULL;
+    struct container *c = kalloc(sizeof(struct container));
+    init_container(c);
+    c->parent = thisproc()->container;
+    c->rootproc = create_proc();
+    c->rootproc->container = c;
+    start_proc(c->rootproc, root_entry, arg);
+    return c;
 }
 
 int next_localpid(struct container *container)

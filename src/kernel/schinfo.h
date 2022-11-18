@@ -2,6 +2,8 @@
 
 #include <common/rbtree.h>
 struct proc; // dont include proc.h here
+struct scheduler_;
+typedef struct scheduler_ const *scheduler;
 
 enum procstate
 {
@@ -19,13 +21,15 @@ struct schinfo
     struct rb_node_ sch_node;
 
     enum procstate state;
-    u64 vruntime;
     bool group;
+
+    u64 vruntime;
+    u64 start;
 };
 
 // embedded data for containers
 struct schqueue
 {
-    struct scheduler *scheduler;
+    scheduler scheduler;
     struct rb_root_ sch_root;
 };
