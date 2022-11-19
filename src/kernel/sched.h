@@ -5,24 +5,6 @@
 
 #define RR_TIME 1000
 
-struct scheduler_
-{
-  // update the state of current running entity
-  void (*update_old)(struct schinfo *);
-
-  // pick next running entity
-  struct proc *(*pick_next)(struct schqueue *);
-
-  void (*update_new)(struct schinfo *);
-
-  // add the schinfo node to the schqueue of its parent
-  void (*activacte)(struct schinfo *);
-};
-
-typedef struct scheduler_ const *scheduler;
-
-extern struct scheduler_ cfs_scheduler, idle_scheduler;
-
 void init_schinfo(struct schinfo *, bool group);
 void init_schqueue(struct schqueue *);
 
@@ -41,5 +23,3 @@ void _sched(enum procstate new_state);
 WARN_RESULT struct proc *thisproc();
 
 void sched_timer_handler(struct timer *);
-
-void dump_sched();

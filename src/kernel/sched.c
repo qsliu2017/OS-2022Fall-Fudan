@@ -1,6 +1,6 @@
-#include <kernel/sched.h>
 #include <common/spinlock.h>
 #include <common/string.h>
+#include <kernel/sched.h>
 #include <kernel/proc.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
@@ -13,9 +13,7 @@ extern bool panic_flag;
 
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
-extern NO_RETURN void idle_entry(u64);
 extern NO_RETURN void kernel_entry(u64);
-extern NO_RETURN void proc_entry();
 
 /* Public lock for sched */
 static SpinLock sched_lock;
@@ -24,18 +22,16 @@ define_init(sched)
 {
     init_spinlock(&sched_lock);
 
-    idle_container.schqueue.scheduler = &idle_scheduler;
     for (auto i = 0; i < NCPU; i++)
     {
         auto sched = &cpus[i].sched;
 
         auto idle = &sched->idle;
-        idle->container = &idle_container;
-        idle->schinfo.state = RUNNING;
+        idle->state = RUNNING;
         cpus[i].sched.running = idle;
 
         auto timer = &sched->sched_timer;
-        timer->elapse = 89;
+        timer->elapse = 1;
         timer->handler = sched_timer_handler;
     }
 
@@ -50,14 +46,12 @@ struct proc *thisproc()
 void init_schinfo(struct schinfo *p, bool group)
 {
     memset(p, 0, sizeof(*p));
-    p->state = UNUSED;
     p->group = group;
 }
 
-void init_schqueue(struct schqueue *p)
+void init_schqueue(struct schqueue *q)
 {
-    memset(p, 0, sizeof(*p));
-    p->scheduler = &cfs_scheduler;
+    memset(q, 0, sizeof(*q));
 }
 
 void _acquire_sched_lock()
@@ -74,46 +68,7 @@ bool is_zombie(struct proc *p)
 {
     bool r;
     _acquire_sched_lock();
-    r = p->schinfo.state == ZOMBIE;
-    _release_sched_lock();
-    return r;
-}
-
-static inline scheduler __group_scheduler(struct container *c)
-{
-    return c->schqueue.scheduler;
-}
-
-static inline scheduler __proc_scheduler(struct proc *p)
-{
-    return __group_scheduler(p->container);
-}
-
-bool _activate_proc(struct proc *p, bool onalert)
-{
-    bool r;
-    _acquire_sched_lock();
-    switch (p->schinfo.state)
-    {
-    case RUNNABLE:
-    case RUNNING:
-    case ZOMBIE:
-        r = false;
-        break;
-    case DEEPSLEEPING:
-        r = !onalert;
-        break;
-    case SLEEPING:
-    case UNUSED:
-        r = true;
-        break;
-    default:
-        PANIC();
-    }
-    if (r){
-        __proc_scheduler(p)->activacte(&p->schinfo);
-        p->schinfo.state = RUNNABLE;
-    }
+    r = p->state == ZOMBIE;
     _release_sched_lock();
     return r;
 }
@@ -122,73 +77,161 @@ bool is_unused(struct proc *p)
 {
     bool r;
     _acquire_sched_lock();
-    r = p->schinfo.state == UNUSED;
+    r = p->state == UNUSED;
     _release_sched_lock();
     return r;
 }
 
-static void idle_update_old(struct schinfo *i)
+static bool cfs_cmp(rb_node lnode, rb_node rnode)
 {
-    struct proc *p = container_of(i, struct proc, schinfo);
-    ASSERT(&cpus[cpuid()].sched.idle == p);
+    struct schinfo *l = container_of(lnode, struct schinfo, sch_node),
+                   *r = container_of(rnode, struct schinfo, sch_node);
+    return l->vruntime == r->vruntime ? l < r : l->vruntime < r->vruntime;
 }
 
-static struct proc *idle_pick_next(struct schqueue *q)
+// add the schinfo node of the group to the schqueue of its parent
+void activate_group(struct container *group)
 {
-    UNUSE(q);
-    return &cpus[cpuid()].sched.idle;
+    auto parent = group->parent;
+    if (parent == group)
+        return;
+    ASSERT(!_rb_insert(&group->schinfo.sch_node, &parent->schqueue.sch_root, cfs_cmp));
+    if (parent->schqueue.sch_cnt++ == 0)
+        activate_group(parent);
 }
 
-static void idle_update_new(struct schinfo *p)
+// if the proc->state is RUNNING/RUNNABLE, do nothing and return false
+// if the proc->state is SLEEPING/UNUSED, set the process state to RUNNABLE, add it to the sched queue, and return true
+// if the proc->state is DEEPSLEEING, do nothing if onalert or activate it if else, and return the corresponding value.
+bool _activate_proc(struct proc *p, bool onalert)
 {
-    UNUSE(p);
+    bool r = false;
+    _acquire_sched_lock();
+    switch (p->state)
+    {
+    case RUNNING:
+    case RUNNABLE:
+        r = false;
+        break;
+    case SLEEPING:
+    case UNUSED:
+        r = true;
+        break;
+    case DEEPSLEEPING:
+        r = !onalert;
+        break;
+    default:
+        break;
+    }
+    if (r)
+    {
+        p->state = RUNNABLE;
+        auto parent = p->container;
+        ASSERT(!_rb_insert(&p->schinfo.sch_node, &parent->schqueue.sch_root, cfs_cmp));
+        // if group was empty, activate it
+        if (parent->schqueue.sch_cnt++ == 0)
+            activate_group(parent);
+    }
+    _release_sched_lock();
+    return r;
 }
 
-static void idle_activate(struct schinfo *p)
+// update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
+static void update_this_state(enum procstate new_state)
 {
-    UNUSE(p);
+    auto this = thisproc();
+    this->state = new_state;
+
+    // simply update state for idle
+    if (this == &cpus[cpuid()].sched.idle)
+        return;
+
+    // calculate runtime delta and update process
+    u64 delta = get_timestamp() - this->exec_start;
+    this->schinfo.vruntime += delta;
+
+    // update ancestor container
+    for (struct container *group = this->container; group != group->parent; group = group->parent)
+    {
+        rb_node child = &group->schinfo.sch_node;
+        rb_root parent = &group->parent->schqueue.sch_root;
+
+        // if container already in its parent's schqueue, erase and re-insert for maintaining rbtree
+        bool update = !!_rb_lookup(child, parent, cfs_cmp);
+        group->schinfo.vruntime += delta;
+        if (update)
+        {
+            _rb_erase(child, parent);
+            ASSERT(!_rb_insert(child, parent, cfs_cmp));
+        }
+    }
+
+    // add it to sch queue if RUNNABLE
+    if (new_state == RUNNABLE)
+    {
+        auto parent = this->container;
+        ASSERT(!_rb_insert(&this->schinfo.sch_node, &parent->schqueue.sch_root, cfs_cmp));
+        // if group was empty, activate it
+        if (parent->schqueue.sch_cnt++ == 0)
+            activate_group(parent);
+    }
 }
 
-struct scheduler_ idle_scheduler = {
-    .update_old = idle_update_old,
-    .pick_next = idle_pick_next,
-    .update_new = idle_update_new,
-    .activacte = idle_activate,
-};
+// choose the next process to run, and return idle if no runnable process
+static struct proc *pick_next()
+{
+    struct proc *next = NULL;
 
-static const scheduler sched_q[] = {&cfs_scheduler, &idle_scheduler};
+    // try to find the leftmost node of CFS tree
+    for (auto container = &root_container;;)
+    {
+        auto first = _rb_first(&container->schqueue.sch_root);
+        if (!first)
+            break;
+        struct schinfo *entity = container_of(first, struct schinfo, sch_node);
+        if (!entity->group)
+        {
+            next = container_of(entity, struct proc, schinfo);
+            break;
+        }
+        container = container_of(entity, struct container, schinfo);
+    }
+
+    // return idle if no runnable process
+    if (!next)
+        return &cpus[cpuid()].sched.idle;
+
+    // remove proc from its container schqueue
+    _rb_erase(&next->schinfo.sch_node, &next->container->schqueue.sch_root);
+
+    // remove empty container from its parent schqueue
+    // bottom-up, recursive
+    for (struct container *child = next->container, *parent = child->parent; --child->schqueue.sch_cnt == 0 && child != parent; child = parent, parent = parent->parent)
+    {
+        _rb_erase(&child->schinfo.sch_node, &parent->schqueue.sch_root);
+    }
+
+    return next;
+}
+
+// update thisproc to the choosen process, and reset the clock interrupt if need
+static void update_this_proc(struct proc *p)
+{
+    cpus[cpuid()].sched.running = p;
+    p->exec_start = get_timestamp();
+}
 
 // A simple scheduler.
 // You are allowed to replace it with whatever you like.
 static void simple_sched(enum procstate new_state)
 {
     auto this = thisproc();
-
-    if (this->killed && new_state != ZOMBIE)
-    {
-        _release_sched_lock();
-        return;
-    }
-
-    this->schinfo.state = new_state;
-    __proc_scheduler(this)->update_old(&this->schinfo);
-    if (new_state == RUNNABLE)
-        __proc_scheduler(this)->activacte(&this->schinfo);
-
-    struct proc *next = NULL;
-    for (usize i = 0; i < sizeof(sched_q) / sizeof(sched_q[0]); i++)
-    {
-        if ((next = sched_q[i]->pick_next(&root_container.schqueue)) != NULL)
-            break;
-    }
-    ASSERT(next);
-
-    __proc_scheduler(next)->update_new(&next->schinfo);
-
-    ASSERT(next->schinfo.state == RUNNABLE);
-    next->schinfo.state = RUNNING;
-    cpus[cpuid()].sched.running = next;
-
+    ASSERT(this->state == RUNNING);
+    update_this_state(new_state);
+    auto next = pick_next();
+    update_this_proc(next);
+    ASSERT(next->state == RUNNABLE);
+    next->state = RUNNING;
     if (next != this)
     {
         attach_pgdir(&next->pgdir);

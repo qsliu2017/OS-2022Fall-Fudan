@@ -10,6 +10,16 @@
 
 #define NPROC 128
 
+enum procstate
+{
+    UNUSED,
+    RUNNABLE,
+    RUNNING,
+    SLEEPING,
+    DEEPSLEEPING,
+    ZOMBIE
+};
+
 typedef struct UserContext
 {
     /* When an exception causes a mode change, the core automatically
@@ -92,6 +102,8 @@ struct proc
     /* Owned by sched.c */
 
     struct schinfo schinfo;
+    enum procstate state;
+    u64 exec_start;
 
     /* Shared fields. Should hold proc lock first. */
 
