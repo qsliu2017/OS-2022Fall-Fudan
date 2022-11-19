@@ -94,7 +94,7 @@ int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
     }
 
     /* init sched.c */
-    p->container->schqueue.scheduler->init_schinfo(&p->schinfo, false);
+    init_schinfo(&p->schinfo, false);
 
     // setup the kcontext to make the proc start with proc_entry(entry, arg)
     ASSERT(p->kstack != NULL);
@@ -116,6 +116,7 @@ NO_RETURN void exit(int code)
 {
     _acquire_spinlock(&proc_lock);
     auto this = thisproc();
+    ASSERT(this->container->rootproc != this);
     auto root = this->container->rootproc;
 
     ASSERT(this != root);

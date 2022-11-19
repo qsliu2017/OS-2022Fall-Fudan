@@ -1,19 +1,6 @@
 #include <common/string.h>
 #include <kernel/sched.h>
 
-static void _init_schinfo(struct schinfo *p, bool group)
-{
-  memset(p, 0, sizeof(*p));
-  p->state = UNUSED;
-  p->group = group;
-}
-
-static void _init_schqueue(struct schqueue *p)
-{
-  memset(p, 0, sizeof(*p));
-  p->scheduler = &cfs_scheduler;
-}
-
 static bool cfs_cmp(rb_node lnode, rb_node rnode)
 {
   struct schinfo *l = container_of(lnode, struct schinfo, sch_node),
@@ -21,79 +8,81 @@ static bool cfs_cmp(rb_node lnode, rb_node rnode)
   return l->vruntime == r->vruntime ? l < r : l->vruntime < r->vruntime;
 }
 
-static void update_old(struct proc *p, enum procstate new_state)
+static void update_old(struct schinfo *p)
 {
-  ASSERT(p->schinfo.state == RUNNING);
-  ASSERT(p->container->schqueue.scheduler == &cfs_scheduler);
+  u64 delta = get_timestamp() - p->start;
+  p->vruntime += delta;
 
-  u64 delta = get_timestamp() - p->schinfo.start;
-  p->schinfo.vruntime += delta;
-  p->schinfo.state = new_state;
-
-  for (auto group = p->container; group != group->parent; group = group->parent)
+  struct container *container;
+  if (p->group)
   {
-    group->schinfo.vruntime += delta;
-
-    auto child = &group->schinfo.sch_node;
-    auto parent = &group->parent->schqueue.sch_root;
-    if (_rb_lookup(child, parent, cfs_cmp))
+    struct container *child = container_of(p, struct container, schinfo),
+                     *parent = child->parent;
+    if (parent == child)
+      return;
+    if (_rb_lookup(&child->schinfo.sch_node, &parent->schqueue.sch_root, cfs_cmp))
     {
-      _rb_erase(child, parent);
-      ASSERT(!_rb_insert(child, parent, cfs_cmp));
+      _rb_erase(&child->schinfo.sch_node, &parent->schqueue.sch_root);
+      ASSERT(!_rb_insert(&child->schinfo.sch_node, &parent->schqueue.sch_root, cfs_cmp));
     }
+    container = parent;
   }
-
-  switch (new_state)
+  else
   {
-  case RUNNABLE:
-    break;
-  case DEEPSLEEPING:
-  case SLEEPING:
-  case ZOMBIE:
-    return;
-  default:
-    PANIC();
+    struct proc *child = container_of(p, struct proc, schinfo);
+    container = child->container;
   }
 
-  rb_node child = &p->schinfo.sch_node;
-  rb_root parent = &p->container->schqueue.sch_root;
-  ASSERT(!_rb_insert(child, parent, cfs_cmp));
+  container->schqueue.scheduler->update_old(&container->schinfo);
 }
 
-static struct proc *pick_next()
+static struct proc *pick_next(struct schqueue *q)
 {
-  struct proc *next = NULL;
-  for (struct container *group = &root_container; !next;)
+  auto first = _rb_first(&q->sch_root);
+  if (!first)
+    return NULL;
+
+  struct schinfo *p = container_of(first, struct schinfo, sch_node);
+
+  struct proc *next;
+  if (p->group)
   {
-    auto first = _rb_first(&group->schqueue.sch_root);
-    ASSERT(group == &root_container || first);
-    if (!first)
-      return NULL;
-
-    struct schinfo *entity = container_of(first, struct schinfo, sch_node);
-    if (entity->group)
-      group = container_of(entity, struct container, schinfo);
-    else
-      next = container_of(entity, struct proc, schinfo);
-  };
-
-  _rb_erase(&next->schinfo.sch_node, &next->container->schqueue.sch_root);
-
-  for (struct container *group = next->container; group != group->parent; group = group->parent)
-  {
-    if (_rb_first(&group->schqueue.sch_root))
-      break;
-    _rb_erase(&group->schinfo.sch_node, &group->parent->schqueue.sch_root);
+    struct container *child = container_of(p, struct container, schinfo);
+    next = child->schqueue.scheduler->pick_next(&child->schqueue);
+    if (!_rb_first(&child->schqueue.sch_root))
+      _rb_erase(first, &q->sch_root);
   }
-
+  else
+  {
+    next = container_of(p, struct proc, schinfo);
+    _rb_erase(first, &q->sch_root);
+  }
   return next;
 }
 
-static void update_new(struct proc *p)
+static void update_new(struct schinfo *p)
 {
-  p->schinfo.start = get_timestamp();
+  p->start = get_timestamp();
+
+  struct container *container;
+  if (p->group)
+  {
+    struct container *child = container_of(p, struct container, schinfo),
+                     *parent = child->parent;
+    if (parent == child)
+      return;
+    container = parent;
+  }
+  else
+  {
+    struct proc *child = container_of(p, struct proc, schinfo);
+    container = child->container;
+  }
+
+  container->schqueue.scheduler->update_new(&container->schinfo);
 }
 
+// add the schinfo node of the group to the schqueue of its parent
 static inline void __activate_group(struct container *c, bool recursive)
 {
   if (c == c->parent)
@@ -109,48 +98,31 @@ static inline void __activate_group(struct container *c, bool recursive)
     __activate_group(c->parent, true);
 }
 
-static bool activacte_proc(struct proc *p, bool onalert)
+// add the schinfo node of the proc to the schqueue of its parent
+static void activacte(struct schinfo *p)
 {
-  switch (p->schinfo.state)
+  struct container *parent;
+  if (p->group)
   {
-  case RUNNABLE:
-  case RUNNING:
-  case ZOMBIE:
-    return false;
-  case DEEPSLEEPING:
-    if (onalert)
-      return false;
-    break;
-  case SLEEPING:
-  case UNUSED:
-    break;
-  default:
-    PANIC();
+    struct container *child = container_of(p, struct container, schinfo);
+    parent = child->parent;
+    if (child == parent)
+      return;
   }
-
-  p->schinfo.state = RUNNABLE;
-
-  bool should_activate_group = _rb_first(&p->container->schqueue.sch_root) == NULL;
-
-  ASSERT(!_rb_insert(&p->schinfo.sch_node, &p->container->schqueue.sch_root, cfs_cmp));
-
-  if (should_activate_group)
-    __activate_group(p->container, true);
-
-  return true;
-}
-
-static inline void activacte_group(struct container *c)
-{
-  __activate_group(c, false);
+  else
+  {
+    struct proc *child = container_of(p, struct proc, schinfo);
+    parent = child->container;
+  }
+  bool recursive = !_rb_first(&parent->schqueue.sch_root);
+  ASSERT(!_rb_insert(&p->sch_node, &parent->schqueue.sch_root, cfs_cmp));
+  if (recursive)
+    parent->parent->schqueue.scheduler->activacte(&parent->schinfo);
 }
 
 struct scheduler_ cfs_scheduler = {
-    .init_schinfo = _init_schinfo,
-    .init_schqueue = _init_schqueue,
     .update_old = update_old,
     .pick_next = pick_next,
     .update_new = update_new,
-    .activacte_proc = activacte_proc,
-    .activacte_group = activacte_group,
+    .activacte = activacte,
 };

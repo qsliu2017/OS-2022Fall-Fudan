@@ -7,13 +7,16 @@
 
 struct scheduler_
 {
-  void (*init_schinfo)(struct schinfo *, bool group);
-  void (*init_schqueue)(struct schqueue *);
-  void (*update_old)(struct proc *, enum procstate);
-  struct proc *(*pick_next)();
-  void (*update_new)(struct proc *);
-  bool (*activacte_proc)(struct proc *, bool onalert);
-  void (*activacte_group)(struct container *);
+  // update the state of current running entity
+  void (*update_old)(struct schinfo *);
+
+  // pick next running entity
+  struct proc *(*pick_next)(struct schqueue *);
+
+  void (*update_new)(struct schinfo *);
+
+  // add the schinfo node to the schqueue of its parent
+  void (*activacte)(struct schinfo *);
 };
 
 typedef struct scheduler_ const *scheduler;

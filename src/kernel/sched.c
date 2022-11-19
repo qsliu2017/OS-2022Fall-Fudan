@@ -49,12 +49,15 @@ struct proc *thisproc()
 
 void init_schinfo(struct schinfo *p, bool group)
 {
-    cfs_scheduler.init_schinfo(p, group);
+    memset(p, 0, sizeof(*p));
+    p->state = UNUSED;
+    p->group = group;
 }
 
 void init_schqueue(struct schqueue *p)
 {
-    cfs_scheduler.init_schqueue(p);
+    memset(p, 0, sizeof(*p));
+    p->scheduler = &cfs_scheduler;
 }
 
 void _acquire_sched_lock()
@@ -86,18 +89,31 @@ static inline scheduler __proc_scheduler(struct proc *p)
     return __group_scheduler(p->container);
 }
 
-void activate_group(struct container *group)
-{
-    _acquire_sched_lock();
-    __group_scheduler(group)->activacte_group(group);
-    _release_sched_lock();
-}
-
 bool _activate_proc(struct proc *p, bool onalert)
 {
     bool r;
     _acquire_sched_lock();
-    r = __proc_scheduler(p)->activacte_proc(p, onalert);
+    switch (p->schinfo.state)
+    {
+    case RUNNABLE:
+    case RUNNING:
+    case ZOMBIE:
+        r = false;
+        break;
+    case DEEPSLEEPING:
+        r = !onalert;
+        break;
+    case SLEEPING:
+    case UNUSED:
+        r = true;
+        break;
+    default:
+        PANIC();
+    }
+    if (r){
+        __proc_scheduler(p)->activacte(&p->schinfo);
+        p->schinfo.state = RUNNABLE;
+    }
     _release_sched_lock();
     return r;
 }
@@ -111,57 +127,33 @@ bool is_unused(struct proc *p)
     return r;
 }
 
-static void idle_init_schinfo(struct schinfo *p, bool group)
+static void idle_update_old(struct schinfo *i)
 {
-    memset(p, 0, sizeof(*p));
-    UNUSE(group);
-    p->state = RUNNING;
-}
-
-static void idle_init_schqueue(struct schqueue *p)
-{
-    memset(p, 0, sizeof(*p));
-    p->scheduler = &idle_scheduler;
-}
-
-static void idle_update_old(struct proc *p, enum procstate new_state)
-{
+    struct proc *p = container_of(i, struct proc, schinfo);
     ASSERT(&cpus[cpuid()].sched.idle == p);
-    ASSERT(new_state == RUNNABLE);
-    p->schinfo.state = RUNNABLE;
 }
 
-static struct proc *idle_pick_next()
+static struct proc *idle_pick_next(struct schqueue *q)
 {
+    UNUSE(q);
     return &cpus[cpuid()].sched.idle;
 }
 
-static void idle_update_new(struct proc *p)
+static void idle_update_new(struct schinfo *p)
 {
     UNUSE(p);
 }
 
-static bool idle_activate_proc(struct proc *p, bool onalert)
+static void idle_activate(struct schinfo *p)
 {
     UNUSE(p);
-    UNUSE(onalert);
-    PANIC();
-}
-
-static void idle_activacte_group(struct container *c)
-{
-    UNUSE(c);
-    PANIC();
 }
 
 struct scheduler_ idle_scheduler = {
-    .init_schinfo = idle_init_schinfo,
-    .init_schqueue = idle_init_schqueue,
     .update_old = idle_update_old,
     .pick_next = idle_pick_next,
     .update_new = idle_update_new,
-    .activacte_proc = idle_activate_proc,
-    .activacte_group = idle_activacte_group,
+    .activacte = idle_activate,
 };
 
 static const scheduler sched_q[] = {&cfs_scheduler, &idle_scheduler};
@@ -178,17 +170,20 @@ static void simple_sched(enum procstate new_state)
         return;
     }
 
-    __proc_scheduler(this)->update_old(this, new_state);
+    this->schinfo.state = new_state;
+    __proc_scheduler(this)->update_old(&this->schinfo);
+    if (new_state == RUNNABLE)
+        __proc_scheduler(this)->activacte(&this->schinfo);
 
     struct proc *next = NULL;
     for (usize i = 0; i < sizeof(sched_q) / sizeof(sched_q[0]); i++)
     {
-        if ((next = sched_q[i]->pick_next()) != NULL)
+        if ((next = sched_q[i]->pick_next(&root_container.schqueue)) != NULL)
             break;
     }
     ASSERT(next);
 
-    __proc_scheduler(next)->update_new(next);
+    __proc_scheduler(next)->update_new(&next->schinfo);
 
     ASSERT(next->schinfo.state == RUNNABLE);
     next->schinfo.state = RUNNING;
