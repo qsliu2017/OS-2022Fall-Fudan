@@ -1,5 +1,11 @@
 #include <driver/sddef.h>
+#include <kernel/init.h>
 #include <kernel/proc.h>
+
+define_init(sd)
+{
+    sd_init();
+}
 
 /*
  * Initialize SD card.

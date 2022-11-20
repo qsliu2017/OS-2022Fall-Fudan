@@ -9,10 +9,13 @@ RefCount alloc_page_cnt;
 
 static void kinit_page();
 
+void init_slab();
+
 define_early_init(alloc_page_cnt)
 {
     init_rc(&alloc_page_cnt);
     kinit_page();
+    init_slab();
 }
 
 typedef struct Page
