@@ -23,6 +23,7 @@ void init_container(struct container *container)
     container->rootproc = NULL;
     init_schinfo(&container->schinfo, true);
     init_schqueue(&container->schqueue);
+    // init_bitmap(container->localids, NLOCAL);
 }
 
 struct container *create_container(void (*root_entry)(), u64 arg)
@@ -36,9 +37,22 @@ struct container *create_container(void (*root_entry)(), u64 arg)
     return c;
 }
 
-int next_localpid(struct container *container)
+int alloc_localpid(struct container *container)
 {
-    return __atomic_fetch_add(&container->localpid, 1, __ATOMIC_RELAXED);
+    for (int i = 0; i < NLOCAL; i++)
+    {
+        if (bitmap_get(container->localids, i))
+            continue;
+        bitmap_set(container->localids, i);
+        return i;
+    }
+    PANIC();
+}
+
+void free_localpid(struct container *container, int localpid)
+{
+    ASSERT(bitmap_get(container->localids, localpid));
+    bitmap_clear(container->localids, localpid);
 }
 
 define_early_init(root_container)

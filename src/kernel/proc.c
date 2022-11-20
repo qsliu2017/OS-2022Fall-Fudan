@@ -104,7 +104,7 @@ int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
     p->kcontext->x29 = (u64)p->kcontext;
     p->kcontext->x30 = (u64)proc_entry;
 
-    p->localpid = next_localpid(p->container);
+    p->localpid = alloc_localpid(p->container);
 
     // activate the proc and return its pid
     activate_proc(p);
@@ -176,6 +176,7 @@ int wait(int *exitcode, int *pid)
     ASSERT(child->kstack);
     kfree_page(child->kstack);
     *pid = get_pid(child);
+    free_localpid(child->container, child->localpid);
 
     ASSERT(!_rb_insert(&child->node, &free_root, __proc_cmp));
 
