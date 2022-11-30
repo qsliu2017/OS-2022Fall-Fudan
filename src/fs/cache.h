@@ -35,6 +35,7 @@ typedef struct {
 // see `begin_op` and `end_op`.
 typedef struct {
     usize rm;
+    usize ts;
     // hint: you may want to add something else here.
 
     struct rb_root_
