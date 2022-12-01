@@ -1,5 +1,6 @@
 #include <kernel/pt.h>
 #include <kernel/mem.h>
+#include <kernel/paging.h>
 #include <kernel/printk.h>
 #include <common/string.h>
 #include <aarch64/intrinsic.h>
@@ -41,6 +42,8 @@ void init_pgdir(struct pgdir *pgdir)
     auto p = kalloc_page();
     memset(p, 0, sizeof(PTEntries));
     pgdir->pt = p;
+    init_spinlock(&pgdir->lock);
+    init_sections(&pgdir->section_head);
 }
 
 typedef void pte_func(u64 pte);
@@ -73,13 +76,32 @@ void free_pgdir(struct pgdir *pgdir)
     walk_pgt(pgdir->pt, 0, free_pgt);
 }
 
+void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
+{
+    *get_pte(pd, va, true) = K2P(ka) | flags;
+    attach_pgdir(pd);
+}
+
+static struct pgdir *current;
+
+struct pgdir *current_pgdir()
+{
+    return current;
+}
+
 void attach_pgdir(struct pgdir *pgdir)
 {
     extern PTEntries invalid_pt;
     if (pgdir->pt)
+    {
         arch_set_ttbr0(K2P(pgdir->pt));
+        current = pgdir;
+    }
     else
+    {
         arch_set_ttbr0(K2P(&invalid_pt));
+        current = NULL;
+    }
 }
 
 void dump_pt(PTEntriesPtr pt)

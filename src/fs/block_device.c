@@ -1,5 +1,6 @@
 #include <driver/sd.h>
 #include <fs/block_device.h>
+#include <kernel/init.h>
 #include <kernel/printk.h>
 
 #define BLOCKNO_OFFSET 0x20800
@@ -23,9 +24,14 @@ static void sd_write(usize block_no, u8* buffer) {
 static u8 sblock_data[BLOCK_SIZE];
 BlockDevice block_device;
 
+define_init(_block_device)
+{
+    init_block_device();
+}
+
 void init_block_device() {
     // FIXME
-    // sd_init();
+    sd_init();
     sd_read(1, sblock_data);
     block_device.read = sd_read;
     block_device.write = sd_write;

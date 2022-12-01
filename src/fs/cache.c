@@ -301,7 +301,7 @@ static void cache_end_op(OpContext *ctx)
 // hint: you can use `cache_acquire`/`cache_sync` to read/write blocks.
 static usize cache_alloc(OpContext *ctx)
 {
-    for (usize i = sblock->num_blocks - sblock->num_data_blocks; i < sblock->num_blocks;)
+    for (usize i = sblock->num_blocks - sblock->num_data_blocks; i < MIN(sblock->num_blocks, (usize)SWAP_START);)
     {
         Block *b = cache_acquire(sblock->bitmap_start + i / BIT_PER_BLOCK);
         usize j = (i / BIT_PER_BLOCK + 1) * BIT_PER_BLOCK;

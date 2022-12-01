@@ -1,5 +1,6 @@
 #include <common/list.h>
 #include <common/rc.h>
+#include <common/string.h>
 #include <driver/memlayout.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
@@ -11,11 +12,14 @@ static void kinit_page();
 
 void init_slab();
 
+static void init_zero_page();
+
 define_early_init(alloc_page_cnt)
 {
     init_rc(&alloc_page_cnt);
     kinit_page();
     init_slab();
+    init_zero_page();
 }
 
 typedef struct Page
@@ -29,8 +33,11 @@ typedef struct Page
 
 static QueueNode *freepages;
 
+static struct page __page_cnt;
+
 void kinit_page()
 {
+    init_rc(&__page_cnt.ref);
     freepages = NULL;
     extern char end[];
     for (u64 p = round_up((u64)end, PAGE_SIZE); p < P2K(PHYSTOP); p += PAGE_SIZE)
@@ -43,6 +50,7 @@ void *kalloc_page()
 {
     auto freepage = container_of(fetch_from_queue(&freepages), Page, freequeue);
     ASSERT(freepage != NULL);
+    _decrement_rc(&__page_cnt.ref);
     return freepage->mem;
 }
 
@@ -50,6 +58,7 @@ void kfree_page(void *p)
 {
     Page *page = (Page *)p;
     add_to_queue(&freepages, &page->freequeue);
+    _increment_rc(&__page_cnt.ref);
 }
 
 void *kalloc(isize size)
@@ -60,4 +69,44 @@ void *kalloc(isize size)
 void kfree(void *p)
 {
     _kfree(p);
+}
+
+u64 left_page_cnt()
+{
+    return (u64)__page_cnt.ref.count;
+}
+
+static void *__zero_page;
+
+static void init_zero_page()
+{
+    __zero_page = kalloc_page();
+    memset(__zero_page, 0, PAGE_SIZE);
+}
+
+void *get_zero_page()
+{
+    return __zero_page;
+}
+
+bool check_zero_page()
+{
+    for (u8 *p = __zero_page; p < (u8 *)__zero_page + PAGE_SIZE; p++)
+    {
+        if (*p)
+            return false;
+    }
+    return true;
+}
+
+u32 write_page_to_disk(void *ka)
+{
+    UNUSE(ka);
+    return 0;
+}
+
+void read_page_from_disk(void *ka, u32 bno)
+{
+    UNUSE(ka);
+    UNUSE(bno);
 }

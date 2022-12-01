@@ -1,6 +1,7 @@
 #include <aarch64/trap.h>
 #include <aarch64/intrinsic.h>
 #include <kernel/sched.h>
+#include <kernel/paging.h>
 #include <kernel/printk.h>
 #include <driver/interrupt.h>
 #include <kernel/proc.h>
@@ -38,8 +39,8 @@ void trap_global_handler(UserContext* context)
         case ESR_EC_DABORT_EL0:
         case ESR_EC_DABORT_EL1:
         {
-            printk("Page fault %llu\n", ec);
-            PANIC();
+            pgfault(iss);
+            // PANIC();
         } break;
         default:
         {

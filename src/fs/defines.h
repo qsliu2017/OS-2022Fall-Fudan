@@ -76,3 +76,8 @@ typedef struct {
 
 // mkfs only
 #define FSSIZE 1000  // Size of file system in blocks
+
+#define SWAP_START 800
+#define SWAP_END 1000
+#define SWAP_BIT_START 100
+#define SWAP_BIT_END 125

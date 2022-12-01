@@ -4,7 +4,8 @@
 
 define_init(sd)
 {
-    sd_init();
+    // init in block_devide
+    // sd_init();
 }
 
 /*
