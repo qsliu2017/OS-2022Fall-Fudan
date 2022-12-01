@@ -95,3 +95,5 @@ NO_INLINE NO_RETURN void _panic(const char*, int);
     })
 
 #define UNUSE(var) (void)(var)
+
+#define DEBUG() printk("%s:%d\n", __FILE__, __LINE__)
