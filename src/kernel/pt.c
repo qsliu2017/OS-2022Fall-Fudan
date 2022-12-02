@@ -79,7 +79,8 @@ void free_pgdir(struct pgdir *pgdir)
 void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
 {
     *get_pte(pd, va, true) = K2P(ka) | flags;
-    attach_pgdir(pd);
+    kref_page(ka);
+	arch_tlbi_vmalle1is();
 }
 
 static struct pgdir *current;

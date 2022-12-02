@@ -85,7 +85,7 @@ void swapout(struct pgdir *pd, struct section *st)
 				}
 				auto pte = get_pte(pd, addr, false);
 				ASSERT(pte);
-				kfree_page((void *)P2K(PAGE_BASE((u64)*pte)));
+				kderef_page((void *)P2K(PAGE_BASE((u64)*pte)));
 				*pte &= 0xFFF;
 				*pte |= i << 12;
 				*pte &= ~PTE_VALID;
@@ -105,6 +105,7 @@ void swapin(struct pgdir *pd, struct section *st)
 		ASSERT(pte);
 		u32 idx = P2N(*pte);
 		auto p = kalloc_page();
+		kref_page(p);
 		for (int i = 0; i < BLOCKS_PER_PAGE; i++)
 		{
 			block_device.read(SWAP_START + idx * BLOCKS_PER_PAGE + i, (u8 *)p + i * BLOCK_SIZE);
@@ -145,20 +146,22 @@ int pgfault(u64 iss)
 	auto pte = get_pte(pd, addr, false);
 	if (!pte || !*pte)
 	{
-		*get_pte(pd, addr, true) = K2P(kalloc_page()) | PTE_USER_DATA;
-		attach_pgdir(pd);
+		auto p = kalloc_page();
+		kref_page(p);
+		*get_pte(pd, addr, true) = K2P(p) | PTE_USER_DATA;
 	}
 	else if (st->flags & ST_SWAP)
 	{
 		swapin(pd, st);
-		attach_pgdir(pd);
 	}
 	else if (*pte & PTE_RO)
 	{
-		void *copy = kalloc_page();
-		memcpy(copy, (void *)addr, PAGE_SIZE);
-		*pte = K2P(copy) | PTE_USER_DATA;
-		attach_pgdir(pd);
+		void *new_p = kalloc_page();
+		kref_page(new_p);
+		void *old_p = (void *)P2K(PAGE_BASE(*pte));
+		memcpy(new_p, old_p, PAGE_SIZE);
+		*pte = K2P(new_p) | PTE_USER_DATA;
+		kderef_page(old_p);
 	}
 
 	return 0;
