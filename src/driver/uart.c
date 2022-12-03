@@ -41,7 +41,8 @@ char uart_get_char() {
 }
 
 void uart_put_char(char c) {
-    while (!(device_get_u32(AUX_MU_LSR_REG) & 0x20)) {}
+    while (!(device_get_u32(AUX_MU_LSR_REG) & 0x20)) {
+    }
 
     device_put_u32(AUX_MU_IO_REG, c);
 

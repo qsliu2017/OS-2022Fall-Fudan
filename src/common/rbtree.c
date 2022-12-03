@@ -22,7 +22,8 @@ static inline void rb_set_parent(rb_node rb, rb_node p) {
 static inline void rb_set_parent_color(rb_node rb, rb_node p, int color) {
     rb->__rb_parent_color = (unsigned long)p | color;
 }
-static inline void __rb_change_child(rb_node old, rb_node _new, rb_node parent, rb_root root) {
+static inline void __rb_change_child(rb_node old, rb_node _new, rb_node parent,
+                                     rb_root root) {
     if (parent) {
         if (parent->rb_left == old)
             parent->rb_left = _new;
@@ -31,7 +32,8 @@ static inline void __rb_change_child(rb_node old, rb_node _new, rb_node parent, 
     } else
         root->rb_node = _new;
 }
-static inline void __rb_rotate_set_parents(rb_node old, rb_node _new, rb_root root, int color) {
+static inline void __rb_rotate_set_parents(rb_node old, rb_node _new,
+                                           rb_root root, int color) {
     rb_node parent = rb_parent(old);
     _new->__rb_parent_color = old->__rb_parent_color;
     rb_set_parent_color(old, _new, color);
@@ -49,7 +51,7 @@ static void __rb_insert_fix(rb_node node, rb_root root) {
 
         gparent = rb_red_parent(parent);
         tmp = gparent->rb_right;
-        if (parent != tmp) { /* parent == gparent->rb_left */
+        if (parent != tmp) {             /* parent == gparent->rb_left */
             if (tmp && rb_is_red(tmp)) { /*Case 1,uncle is red*/
                 rb_set_parent_color(tmp, gparent, RB_BLACK);
                 rb_set_parent_color(parent, gparent, RB_BLACK);
@@ -173,7 +175,8 @@ static void __rb_erase_fix(rb_node parent, rb_root root) {
             tmp1 = sibling->rb_right;
             if (!tmp1 || rb_is_black(tmp1)) {
                 tmp2 = sibling->rb_left;
-                if (!tmp2 || rb_is_black(tmp2)) { /*Case 2,sibling black,ch1,ch2 black*/
+                if (!tmp2 ||
+                    rb_is_black(tmp2)) { /*Case 2,sibling black,ch1,ch2 black*/
                     rb_set_parent_color(sibling, parent, RB_RED);
                     if (rb_is_red(parent)) {
                         rb_set_black(parent);
@@ -213,7 +216,8 @@ static void __rb_erase_fix(rb_node parent, rb_root root) {
             tmp1 = sibling->rb_left;
             if (!tmp1 || rb_is_black(tmp1)) {
                 tmp2 = sibling->rb_right;
-                if (!tmp2 || rb_is_black(tmp2)) { /*Case 2,sibling black,ch1,ch2 black*/
+                if (!tmp2 ||
+                    rb_is_black(tmp2)) { /*Case 2,sibling black,ch1,ch2 black*/
                     rb_set_parent_color(sibling, parent, RB_RED);
                     if (rb_is_red(parent)) {
                         rb_set_black(parent);
@@ -244,7 +248,8 @@ static void __rb_erase_fix(rb_node parent, rb_root root) {
         }
     }
 }
-int _rb_insert(rb_node node, rb_root rt, bool (*cmp)(rb_node lnode, rb_node rnode)) {
+int _rb_insert(rb_node node, rb_root rt,
+               bool (*cmp)(rb_node lnode, rb_node rnode)) {
     rb_node nw = rt->rb_node, parent = NULL;
     node->rb_left = node->rb_right = NULL;
     node->__rb_parent_color = 0;
@@ -274,7 +279,8 @@ void _rb_erase(rb_node node, rb_root root) {
     if (rebalance)
         __rb_erase_fix(rebalance, root);
 }
-rb_node _rb_lookup(rb_node node, rb_root rt, bool (*cmp)(rb_node lnode, rb_node rnode)) {
+rb_node _rb_lookup(rb_node node, rb_root rt,
+                   bool (*cmp)(rb_node lnode, rb_node rnode)) {
     rb_node nw = rt->rb_node;
     while (nw) {
         if (cmp(node, nw)) {

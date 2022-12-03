@@ -1,34 +1,33 @@
-#include <test/test.h>
 #include <common/rc.h>
+#include <common/sem.h>
 #include <common/string.h>
-#include <kernel/pt.h>
 #include <kernel/mem.h>
 #include <kernel/printk.h>
-#include <common/sem.h>
-#include <kernel/sched.h>
 #include <kernel/proc.h>
+#include <kernel/pt.h>
+#include <kernel/sched.h>
 #include <kernel/syscall.h>
+#include <test/test.h>
 
-PTEntriesPtr get_pte(struct pgdir* pgdir, u64 va, bool alloc);
+PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc);
 
 void vm_test() {
     printk("vm_test\n");
-    static void* p[100000];
+    static void *p[100000];
     extern RefCount alloc_page_cnt;
     struct pgdir pg;
     int p0 = alloc_page_cnt.count;
     init_pgdir(&pg);
-    for (u64 i = 0; i < 100000; i++)
-    {
+    for (u64 i = 0; i < 100000; i++) {
         p[i] = kalloc_page();
         *get_pte(&pg, i << 12, true) = K2P(p[i]) | PTE_USER_DATA;
-        *(int*)p[i] = i;
+        *(int *)p[i] = i;
     }
     attach_pgdir(&pg);
-    for (u64 i = 0; i < 100000; i++)
-    {
-        ASSERT(*(int*)(P2K(PTE_ADDRESS(*get_pte(&pg, i << 12, false)))) == (int)i);
-        ASSERT(*(int*)(i << 12) == (int)i);
+    for (u64 i = 0; i < 100000; i++) {
+        ASSERT(*(int *)(P2K(PTE_ADDRESS(*get_pte(&pg, i << 12, false)))) ==
+               (int)i);
+        ASSERT(*(int *)(i << 12) == (int)i);
     }
     free_pgdir(&pg);
     attach_pgdir(&pg);
@@ -46,31 +45,29 @@ static int pids[22], localpids[22];
 static Semaphore myrepot_done, container_done;
 extern char loop_start[], loop_end[];
 
-define_syscall(myreport, u64 id)
-{
+define_syscall(myreport, u64 id) {
     ASSERT(id < 22);
     ASSERT(thisproc()->localpid == localpids[id]);
     ASSERT(get_pid(thisproc()) == pids[id]);
     if (stop)
         return 0;
     if (proc_cnt[id] == 0)
-        printk("proc %llu: pid=%d localpid=%d\n", id, get_pid(thisproc()), thisproc()->localpid);
+        printk("proc %llu: pid=%d localpid=%d\n", id, get_pid(thisproc()),
+               thisproc()->localpid);
     proc_cnt[id]++;
     cpu_cnt[cpuid()]++;
-    if (proc_cnt[id] > 21000)
-    {
+    if (proc_cnt[id] > 21000) {
         stop = true;
         post_sem(&myrepot_done);
     }
     return 0;
 }
 
-static void _create_user_proc(int i)
-{
+static void _create_user_proc(int i) {
     auto p = create_proc();
-    for (u64 q = (u64)loop_start; q < (u64)loop_end; q += PAGE_SIZE)
-    {
-        *get_pte(&p->pgdir, 0x400000 + q - (u64)loop_start, true) = K2P(q) | PTE_USER_DATA;
+    for (u64 q = (u64)loop_start; q < (u64)loop_end; q += PAGE_SIZE) {
+        *get_pte(&p->pgdir, 0x400000 + q - (u64)loop_start, true) =
+            K2P(q) | PTE_USER_DATA;
     }
     ASSERT(p->pgdir.pt);
     p->ucontext->x0 = i;
@@ -83,15 +80,12 @@ static void _create_user_proc(int i)
     localpids[i] = start_proc(p, trap_return, 0);
 }
 
-static int _wait_user_proc()
-{
+static int _wait_user_proc() {
     int code, id = -1, pid, lpid;
     lpid = wait(&code, &pid);
     ASSERT(lpid != -1);
-    for (int j = 0; j < 22; j++)
-    {
-        if (pids[j] == pid)
-        {
+    for (int j = 0; j < 22; j++) {
+        if (pids[j] == pid) {
             id = j;
             ASSERT(localpids[id] == lpid);
         }
@@ -102,8 +96,7 @@ static int _wait_user_proc()
     return id;
 }
 
-void user_proc_test()
-{
+void user_proc_test() {
     printk("user_proc_test\n");
     init_sem(&myrepot_done, 0);
     memset(proc_cnt, 0, sizeof(proc_cnt));
@@ -124,11 +117,9 @@ void user_proc_test()
         printk("Proc %d: %llu\n", i, proc_cnt[i]);
 }
 
-static void container_root(int a)
-{
+static void container_root(int a) {
     printk("Container %d\n", a);
-    if (a == 0)
-    {
+    if (a == 0) {
         create_container(container_root, 2);
         create_container(container_root, 3);
     }
@@ -143,8 +134,7 @@ static void container_root(int a)
     // root process doesn't exit
 }
 
-void container_test()
-{
+void container_test() {
     printk("container_test\n");
     init_sem(&myrepot_done, 0);
     init_sem(&container_done, 0);
@@ -170,4 +160,3 @@ void container_test()
     for (int i = 0; i < 22; i++)
         printk("Proc %d: %llu\n", i, proc_cnt[i]);
 }
-

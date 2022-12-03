@@ -1,10 +1,10 @@
-#include <kernel/sched.h>
 #include <common/sem.h>
-#include <test/test.h>
 #include <kernel/mem.h>
 #include <kernel/printk.h>
+#include <kernel/sched.h>
+#include <test/test.h>
 
-void set_parent_to_this(struct proc* proc);
+void set_parent_to_this(struct proc *proc);
 
 static Semaphore s1, s2, s3, s4, s5, s6;
 
@@ -16,52 +16,68 @@ static Semaphore s1, s2, s3, s4, s5, s6;
 // 8: 90-99 V(s3) P(s4) get_all
 // 9: 100-109 P(s5) V(s6) post
 
-static void proc_test_1b(u64 a)
-{
-    switch (a / 10 - 1)
-    {
-    case 0: break;
-    case 1: yield(); yield(); yield(); break;
-    case 2: post_sem(&s1); break;
-    case 3: case 4: case 5: case 6: case 7:
+static void proc_test_1b(u64 a) {
+    switch (a / 10 - 1) {
+    case 0:
+        break;
+    case 1:
+        yield();
+        yield();
+        yield();
+        break;
+    case 2:
+        post_sem(&s1);
+        break;
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
         if (a & 1)
             post_sem(&s2);
         else
             unalertable_wait_sem(&s2);
         break;
-    case 8: unalertable_wait_sem(&s3); post_sem(&s4); break;
-    case 9: post_sem(&s5); unalertable_wait_sem(&s6); break;
+    case 8:
+        unalertable_wait_sem(&s3);
+        post_sem(&s4);
+        break;
+    case 9:
+        post_sem(&s5);
+        unalertable_wait_sem(&s6);
+        break;
     }
     exit(a);
 }
 
-static void proc_test_1a(u64 a)
-{
-    for (int i = 0; i < 10; i++)
-    {
+static void proc_test_1a(u64 a) {
+    for (int i = 0; i < 10; i++) {
         auto p = create_proc();
         set_parent_to_this(p);
         start_proc(p, proc_test_1b, a * 10 + i + 10);
     }
-    switch (a)
-    {
+    switch (a) {
     case 0: {
         int t = 0, x, y;
-        for (int i = 0; i < 10; i++)
-        {
+        for (int i = 0; i < 10; i++) {
             ASSERT(wait(&x, &y) != -1);
             t |= 1 << (x - 10);
         }
         ASSERT(t == 1023);
         ASSERT(wait(&x, &y) == -1);
     } break;
-    case 1: break; 
-    case 2: { 
+    case 1:
+        break;
+    case 2: {
         for (int i = 0; i < 10; i++)
             unalertable_wait_sem(&s1);
         ASSERT(!get_sem(&s1));
     } break;
-    case 3: case 4: case 5: case 6: case 7: {
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7: {
         int x, y;
         for (int i = 0; i < 10; i++)
             ASSERT(wait(&x, &y) != -1);
@@ -93,8 +109,7 @@ static void proc_test_1a(u64 a)
     exit(a);
 }
 
-static void proc_test_1()
-{
+static void proc_test_1() {
     printk("proc_test_1\n");
     init_sem(&s1, 0);
     init_sem(&s2, 0);
@@ -103,14 +118,12 @@ static void proc_test_1()
     init_sem(&s5, 0);
     init_sem(&s6, 0);
     int pid[10];
-    for (int i = 0; i < 10; i++)
-    {
+    for (int i = 0; i < 10; i++) {
         auto p = create_proc();
         set_parent_to_this(p);
         pid[i] = start_proc(p, proc_test_1a, i);
     }
-    for (int i = 0; i < 10; i++)
-    {
+    for (int i = 0; i < 10; i++) {
         int code, id, t;
         id = wait(&code, &t);
         ASSERT(pid[code] == id);
@@ -119,14 +132,12 @@ static void proc_test_1()
     exit(0);
 }
 
-void proc_test()
-{
+void proc_test() {
     printk("proc_test\n");
     auto p = create_proc();
     int pid = start_proc(p, proc_test_1, 0);
     int t = 0;
-    while (1)
-    {
+    while (1) {
         int code, a;
         int id = wait(&code, &a);
         if (id == -1)

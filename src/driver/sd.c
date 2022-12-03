@@ -2,8 +2,7 @@
 #include <kernel/init.h>
 #include <kernel/proc.h>
 
-define_init(sd)
-{
+define_init(sd) {
     // init in block_devide
     // sd_init();
 }
@@ -30,12 +29,8 @@ void set_interrupt_handler(InterruptType type, InterruptHandler handler);
 /*
 
 */
-ALWAYS_INLINE u32 get_EMMC_DATA()
-{
-    return *EMMC_DATA;
-}
-ALWAYS_INLINE u32 get_and_clear_EMMC_INTERRUPT()
-{
+ALWAYS_INLINE u32 get_EMMC_DATA() { return *EMMC_DATA; }
+ALWAYS_INLINE u32 get_and_clear_EMMC_INTERRUPT() {
     u32 t = *EMMC_INTERRUPT;
     *EMMC_INTERRUPT = t;
     return t;
@@ -51,8 +46,7 @@ static SleepLock sd_lock;
  * See https://en.wikipedia.org/wiki/Master_boot_record
  */
 
-void sd_init()
-{
+void sd_init() {
     /*
      * 1.call sdInit.
      * 2.Initialize the lock and request queue if any.
@@ -81,14 +75,15 @@ void sd_init()
         // ASSERT(mbr_ptr->check[0] == 0x55);
         // ASSERT(mbr_ptr->check[1] == 0xAA);
 
-        printk("LBA of first absolute sector in the partition 2: %d\n", mbr_ptr->partition_entries[1].lba);
-        printk("Number of sectors in partition 2: %d\n", mbr_ptr->partition_entries[1].n_sectors);
+        printk("LBA of first absolute sector in the partition 2: %d\n",
+               mbr_ptr->partition_entries[1].lba);
+        printk("Number of sectors in partition 2: %d\n",
+               mbr_ptr->partition_entries[1].n_sectors);
     }
 }
 
 /* Start the request for b. Caller must hold sdlock. */
-static void sd_start(struct buf *b)
-{
+static void sd_start(struct buf *b) {
     // Address is different depending on the card type.
     // HC pass address as block #.
     // SC pass address straight through.
@@ -101,8 +96,7 @@ static void sd_start(struct buf *b)
 
     arch_dsb_sy();
     // Ensure that any data operation has completed before doing the transfer.
-    if (*EMMC_INTERRUPT)
-    {
+    if (*EMMC_INTERRUPT) {
         printk("emmc interrupt flag should be empty: 0x%x. \n",
                *EMMC_INTERRUPT);
         PANIC();
@@ -115,31 +109,26 @@ static void sd_start(struct buf *b)
     int resp;
     *EMMC_BLKSIZECNT = 512;
 
-    if ((resp = sdSendCommandA(cmd, bno)))
-    {
+    if ((resp = sdSendCommandA(cmd, bno))) {
         printk("* EMMC send command error: %d.\n", resp);
         PANIC();
     }
 
     int done = 0;
     u32 *intbuf = (u32 *)b->data;
-    if (!(((i64)b->data) & 0x03) == 0)
-    {
+    if (!(((i64)b->data) & 0x03) == 0) {
         printk("Only support word-aligned buffers. \n");
         PANIC();
     }
 
-    if (write)
-    {
+    if (write) {
         // Wait for ready interrupt for the next block.
-        if ((resp = sdWaitForInterrupt(INT_WRITE_RDY)))
-        {
+        if ((resp = sdWaitForInterrupt(INT_WRITE_RDY))) {
             printk("* EMMC ERROR: Timeout waiting for ready to write\n");
             PANIC();
             // return sdDebugResponse(resp);
         }
-        if (*EMMC_INTERRUPT)
-        {
+        if (*EMMC_INTERRUPT) {
             printk("%d\n", *EMMC_INTERRUPT);
             PANIC();
         }
@@ -149,8 +138,7 @@ static void sd_start(struct buf *b)
 }
 
 /* The interrupt handler. Sync buf with disk.*/
-void sd_intr()
-{
+void sd_intr() {
     /*
      * Pay attention to whether there is any element in the buflist.
      * Understand the meanings of EMMC_INTERRUPT, EMMC_DATA, INT_DATA_DONE,
@@ -174,8 +162,7 @@ void sd_intr()
      */
 }
 
-void sdrw(buf *b)
-{
+void sdrw(buf *b) {
     /*
      * 1.add buf to the queue
      * 2.if no buf in queue before,send request now
@@ -188,12 +175,9 @@ void sdrw(buf *b)
     raii_acquire_sleeplock(&sd_lock, 0);
     int write = b->flags & B_DIRTY;
     sd_start(b);
-    if (write)
-    {
+    if (write) {
         sdWaitForInterrupt(INT_DATA_DONE);
-    }
-    else
-    {
+    } else {
         sdWaitForInterrupt(INT_READ_RDY);
         u32 *buf = (u32 *)b->data;
         for (usize i = 0; i < sizeof(b->data) / sizeof(u32); i++)
@@ -203,8 +187,7 @@ void sdrw(buf *b)
 }
 
 /* SD card test and benchmark. */
-void sd_test()
-{
+void sd_test() {
     static struct buf b[1 << 11];
     int n = sizeof(b) / sizeof(b[0]);
     int mb = (n * BSIZE) >> 20;
@@ -212,14 +195,12 @@ void sd_test()
     if (!mb)
         PANIC();
     i64 f, t;
-    asm volatile("mrs %[freq], cntfrq_el0"
-                 : [freq] "=r"(f));
+    asm volatile("mrs %[freq], cntfrq_el0" : [freq] "=r"(f));
     printk("- sd test: begin nblocks %d\n", n);
 
     printk("- sd check rw...\n");
     // Read/write test
-    for (int i = 1; i < n; i++)
-    {
+    for (int i = 1; i < n; i++) {
         // Backup.
         b[0].flags = 0;
         b[0].blockno = (u32)i;
@@ -235,8 +216,7 @@ void sd_test()
         // Read back and check
         b[i].flags = 0;
         sdrw(&b[i]);
-        for (int j = 0; j < BSIZE; j++)
-        {
+        for (int j = 0; j < BSIZE; j++) {
             //   assert(b[i].data[j] == (i * j & 0xFF));
             if (b[i].data[j] != (i * j & 0xFF))
                 PANIC();
@@ -250,8 +230,7 @@ void sd_test()
     arch_dsb_sy();
     t = (i64)get_timestamp();
     arch_dsb_sy();
-    for (int i = 0; i < n; i++)
-    {
+    for (int i = 0; i < n; i++) {
         b[i].flags = 0;
         b[i].blockno = (u32)i;
         sdrw(&b[i]);
@@ -266,8 +245,7 @@ void sd_test()
     arch_dsb_sy();
     t = (i64)get_timestamp();
     arch_dsb_sy();
-    for (int i = 0; i < n; i++)
-    {
+    for (int i = 0; i < n; i++) {
         b[i].flags = B_DIRTY;
         b[i].blockno = (u32)i;
         sdrw(&b[i]);
@@ -290,19 +268,15 @@ static void _parallel_sd_test_entry(u64 part);
 
 static volatile bool CORRECTNESS, W_BENCH;
 
-void sd_parallel_test()
-{
+void sd_parallel_test() {
     i64 f, t;
-    asm volatile("mrs %[freq], cntfrq_el0"
-                 : [freq] "=r"(f));
+    asm volatile("mrs %[freq], cntfrq_el0" : [freq] "=r"(f));
     // Parallel test
-    for (int __i = 3; __i > 0; __i--)
-    {
+    for (int __i = 3; __i > 0; __i--) {
         CORRECTNESS = __i >= 3;
         W_BENCH = __i >= 2;
         init_sem(&_parallel_sem, 0);
-        for (int p = 0; p < N_THREAD; p++)
-        {
+        for (int p = 0; p < N_THREAD; p++) {
             ts[p] = 0;
             auto proc = create_proc();
             start_proc(proc, _parallel_sd_test_entry, p);
@@ -310,8 +284,7 @@ void sd_parallel_test()
         for (int p = 0; p < N_THREAD; p++)
             unalertable_wait_sem(&_parallel_sem);
         t = 0;
-        for (int p = 0; p < N_THREAD; p++)
-        {
+        for (int p = 0; p < N_THREAD; p++) {
             t += ts[p];
         }
         printk("- read %dB (%dMB), t: %lld cycles, speed: %lld.%lld MB/s\n",
@@ -319,14 +292,11 @@ void sd_parallel_test()
     }
 }
 
-void _parallel_sd_test(struct buf b[], int from, int to, i64 *t)
-{
-    if (CORRECTNESS)
-    {
+void _parallel_sd_test(struct buf b[], int from, int to, i64 *t) {
+    if (CORRECTNESS) {
         (void)(t);
         struct buf backup;
-        for (int i = from; i < to; i++)
-        {
+        for (int i = from; i < to; i++) {
             // Backup.
             backup.flags = 0;
             backup.blockno = (u32)i;
@@ -342,8 +312,7 @@ void _parallel_sd_test(struct buf b[], int from, int to, i64 *t)
             // Read back and check
             b[i].flags = 0;
             sdrw(&b[i]);
-            for (int j = 0; j < BSIZE; j++)
-            {
+            for (int j = 0; j < BSIZE; j++) {
                 //   assert(b[i].data[j] == (i * j & 0xFF));
                 if (b[i].data[j] != (i * j & 0xFF))
                     PANIC();
@@ -352,16 +321,13 @@ void _parallel_sd_test(struct buf b[], int from, int to, i64 *t)
             backup.flags = B_DIRTY;
             sdrw(&backup);
         }
-    }
-    else if (W_BENCH)
-    {
+    } else if (W_BENCH) {
         i64 _t;
         // Write benchmark
         arch_dsb_sy();
         _t = (i64)get_timestamp();
         arch_dsb_sy();
-        for (int i = from; i < to; i++)
-        {
+        for (int i = from; i < to; i++) {
             b[i].flags = B_DIRTY;
             b[i].blockno = (u32)i;
             sdrw(&b[i]);
@@ -370,16 +336,13 @@ void _parallel_sd_test(struct buf b[], int from, int to, i64 *t)
         _t = (i64)get_timestamp() - _t;
         arch_dsb_sy();
         *t = _t;
-    }
-    else
-    {
+    } else {
         i64 _t;
         // Read benchmark
         arch_dsb_sy();
         _t = (i64)get_timestamp();
         arch_dsb_sy();
-        for (int i = from; i < to; i++)
-        {
+        for (int i = from; i < to; i++) {
             b[i].flags = 0;
             b[i].blockno = (u32)i;
             sdrw(&b[i]);
@@ -393,7 +356,7 @@ void _parallel_sd_test(struct buf b[], int from, int to, i64 *t)
     exit(0);
 }
 
-void _parallel_sd_test_entry(u64 part)
-{
-    _parallel_sd_test(b, part * (n / N_THREAD), (part + 1) * (n / N_THREAD), &ts[part]);
+void _parallel_sd_test_entry(u64 part) {
+    _parallel_sd_test(b, part * (n / N_THREAD), (part + 1) * (n / N_THREAD),
+                      &ts[part]);
 }

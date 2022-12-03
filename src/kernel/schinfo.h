@@ -4,8 +4,7 @@
 struct proc; // dont include proc.h here
 
 // embeded data for procs
-struct schinfo
-{
+struct schinfo {
     struct rb_node_ sch_node;
 
     bool group;
@@ -14,8 +13,7 @@ struct schinfo
 };
 
 // embedded data for containers
-struct schqueue
-{
+struct schqueue {
     struct rb_root_ sch_root;
 
     u64 sch_cnt;

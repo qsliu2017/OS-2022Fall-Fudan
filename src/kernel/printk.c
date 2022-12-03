@@ -5,10 +5,7 @@
 
 static SpinLock printk_lock;
 
-define_early_init(printk)
-{
-    init_spinlock(&printk_lock);
-}
+define_early_init(printk) { init_spinlock(&printk_lock); }
 
 static void _put_char(void *_ctx, char c) {
     (void)_ctx;

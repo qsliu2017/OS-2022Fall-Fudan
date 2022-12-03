@@ -1,13 +1,13 @@
-#include <kernel/container.h>
-#include <kernel/init.h>
-#include <kernel/mem.h>
-#include <kernel/proc.h>
-#include <kernel/pt.h>
-#include <kernel/sched.h>
 #include <common/list.h>
 #include <common/rbtree.h>
 #include <common/string.h>
+#include <kernel/container.h>
+#include <kernel/init.h>
+#include <kernel/mem.h>
 #include <kernel/printk.h>
+#include <kernel/proc.h>
+#include <kernel/pt.h>
+#include <kernel/sched.h>
 
 /* Public lock for proc tree */
 static SpinLock proc_lock;
@@ -17,16 +17,11 @@ struct proc procs[NPROC];
 /* UNUSED procs rbtree root */
 static struct rb_root_ free_root;
 
-static bool __proc_cmp(rb_node lnode, rb_node rnode)
-{
-    return lnode < rnode;
-}
+static bool __proc_cmp(rb_node lnode, rb_node rnode) { return lnode < rnode; }
 
-define_early_init(root_proc)
-{
+define_early_init(root_proc) {
     init_spinlock(&proc_lock);
-    for (int i = 0; i < NPROC; i++)
-    {
+    for (int i = 0; i < NPROC; i++) {
         ASSERT(!_rb_insert(&procs[i].node, &free_root, __proc_cmp));
     }
 
@@ -36,8 +31,7 @@ define_early_init(root_proc)
     rp->parent = rp;
 }
 
-struct proc *create_proc()
-{
+struct proc *create_proc() {
     raii_acquire_spinlock(&proc_lock, create_proc);
 
     auto first = _rb_first(&free_root);
@@ -64,8 +58,7 @@ struct proc *create_proc()
     return p;
 }
 
-void set_parent_to_this(struct proc *proc)
-{
+void set_parent_to_this(struct proc *proc) {
     raii_acquire_spinlock(&proc_lock, set_parent_to_this);
 
     auto this = thisproc();
@@ -73,21 +66,17 @@ void set_parent_to_this(struct proc *proc)
     ASSERT(!_rb_insert(&proc->node, &this->child_root, __proc_cmp));
 }
 
-void proc_entry()
-{
-    asm(
-        "bl _release_sched_lock\n"
+void proc_entry() {
+    asm("bl _release_sched_lock\n"
         "mov x30, x19\n"
         "mov x0, x20\n"
         "mov x1, x21\n");
 }
 
-int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
-{
+int start_proc(struct proc *p, void (*entry)(u64), u64 arg) {
     raii_acquire_spinlock(&proc_lock, start_proc);
 
-    if (!p->parent)
-    {
+    if (!p->parent) {
         auto root = get_root_proc();
         p->parent = root;
         ASSERT(!_rb_insert(&p->node, &root->child_root, __proc_cmp));
@@ -112,8 +101,7 @@ int start_proc(struct proc *p, void (*entry)(u64), u64 arg)
     return p->localpid;
 }
 
-NO_RETURN void exit(int code)
-{
+NO_RETURN void exit(int code) {
     _acquire_spinlock(&proc_lock);
     auto this = thisproc();
     ASSERT(this->container->rootproc != this);
@@ -121,16 +109,14 @@ NO_RETURN void exit(int code)
 
     ASSERT(this != root);
 
-    for (rb_node first; (first = _rb_first(&this->child_root));)
-    {
+    for (rb_node first; (first = _rb_first(&this->child_root));) {
         struct proc *child = container_of(first, struct proc, node);
         _rb_erase(first, &this->child_root);
         child->parent = root;
         ASSERT(!_rb_insert(first, &root->child_root, __proc_cmp));
     }
 
-    for (rb_node first; (first = _rb_first(&this->exit_root));)
-    {
+    for (rb_node first; (first = _rb_first(&this->exit_root));) {
         struct proc *child = container_of(first, struct proc, node);
         _rb_erase(first, &this->exit_root);
         child->parent = root;
@@ -152,8 +138,7 @@ NO_RETURN void exit(int code)
     PANIC(); // prevent the warning of 'no_return function returns'
 }
 
-int wait(int *exitcode, int *pid)
-{
+int wait(int *exitcode, int *pid) {
     raii_acquire_spinlock(&proc_lock, wait);
 
     auto this = thisproc();
@@ -183,8 +168,7 @@ int wait(int *exitcode, int *pid)
     return child->localpid;
 }
 
-int kill(int pid)
-{
+int kill(int pid) {
     ASSERT(0 < pid && pid < NPROC);
     raii_acquire_spinlock(&proc_lock, kill);
 
@@ -199,24 +183,17 @@ int kill(int pid)
     return 0;
 }
 
-void dump_proc(struct proc const *p)
-{
-    printk(
-        "struct proc\n"
-        "{\n"
-        "    bool killed = %d;\n"
-        "    int pid = %d;\n"
-        "    int exitcode = %d;\n"
-        "    struct proc *parent = %p;\n"
-        "    void *kstack = %p;\n"
-        "    UserContext *ucontext = %p;\n"
-        "    KernelContext *kcontext = %p;\n"
-        "};\n",
-        p->killed,
-        get_pid(p),
-        p->exitcode,
-        p->parent,
-        p->kstack,
-        p->ucontext,
-        p->kcontext);
+void dump_proc(struct proc const *p) {
+    printk("struct proc\n"
+           "{\n"
+           "    bool killed = %d;\n"
+           "    int pid = %d;\n"
+           "    int exitcode = %d;\n"
+           "    struct proc *parent = %p;\n"
+           "    void *kstack = %p;\n"
+           "    UserContext *ucontext = %p;\n"
+           "    KernelContext *kcontext = %p;\n"
+           "};\n",
+           p->killed, get_pid(p), p->exitcode, p->parent, p->kstack,
+           p->ucontext, p->kcontext);
 }

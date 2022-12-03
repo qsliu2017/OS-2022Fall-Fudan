@@ -12,18 +12,18 @@ typedef uint32_t uint;
 
 // this file should be compiled with normal gcc...
 
-#define stat  xv6_stat  // avoid clash with host struct stat
+#define stat xv6_stat // avoid clash with host struct stat
 #define sleep xv6_sleep
 // #include "../../../inc/fs.h"
 #include "../../fs/defines.h"
 // #include "../../fs/inode.h"
 
 #ifndef static_assert
-#define static_assert(a, b)                                                                        \
-    do {                                                                                           \
-        switch (0)                                                                                 \
-        case 0:                                                                                    \
-        case (a):;                                                                                 \
+#define static_assert(a, b)                                                    \
+    do {                                                                       \
+        switch (0)                                                             \
+        case 0:                                                                \
+        case (a):;                                                             \
     } while (0)
 #endif
 
@@ -31,19 +31,19 @@ typedef uint32_t uint;
 
 // Disk layout:
 // [ boot block | sb block | log | inode blocks | free bit map | data blocks ]
-#define BSIZE         BLOCK_SIZE
-#define LOGSIZE       LOG_MAX_SIZE
-#define NDIRECT       INODE_NUM_DIRECT
-#define NINDIRECT     INODE_NUM_INDIRECT
-#define DIRSIZ        FILE_NAME_MAX_LENGTH
-#define IPB           (BSIZE / sizeof(InodeEntry))
+#define BSIZE BLOCK_SIZE
+#define LOGSIZE LOG_MAX_SIZE
+#define NDIRECT INODE_NUM_DIRECT
+#define NINDIRECT INODE_NUM_INDIRECT
+#define DIRSIZ FILE_NAME_MAX_LENGTH
+#define IPB (BSIZE / sizeof(InodeEntry))
 #define IBLOCK(i, sb) ((i) / IPB + sb.inode_start)
 
 int nbitmap = FSSIZE / (BSIZE * 8) + 1;
 int ninodeblocks = NINODES / IPB + 1;
 int num_log_blocks = LOGSIZE;
-int nmeta;            // Number of meta blocks (boot, sb, num_log_blocks, inode, bitmap)
-int num_data_blocks;  // Number of data blocks
+int nmeta; // Number of meta blocks (boot, sb, num_log_blocks, inode, bitmap)
+int num_data_blocks; // Number of data blocks
 
 int fsfd;
 SuperBlock sb;
@@ -113,16 +113,13 @@ int main(int argc, char *argv[]) {
     sb.inode_start = xint(2 + num_log_blocks);
     sb.bitmap_start = xint(2 + num_log_blocks + ninodeblocks);
 
-    printf("nmeta %d (boot, super, log blocks %u inode blocks %u, bitmap blocks %u) blocks %d "
-           "total %d\n",
-           nmeta,
-           num_log_blocks,
-           ninodeblocks,
-           nbitmap,
-           num_data_blocks,
-           FSSIZE);
+    printf(
+        "nmeta %d (boot, super, log blocks %u inode blocks %u, bitmap blocks "
+        "%u) blocks %d "
+        "total %d\n",
+        nmeta, num_log_blocks, ninodeblocks, nbitmap, num_data_blocks, FSSIZE);
 
-    freeblock = nmeta;  // the first free block that we can allocate
+    freeblock = nmeta; // the first free block that we can allocate
 
     for (i = 0; i < FSSIZE; i++)
         wsect(i, zeroes);

@@ -3,8 +3,7 @@
 #include <aarch64/mmu.h>
 #include <common/list.h>
 
-struct pgdir
-{
+struct pgdir {
     PTEntriesPtr pt;
     SpinLock lock;
     ListNode section_head;

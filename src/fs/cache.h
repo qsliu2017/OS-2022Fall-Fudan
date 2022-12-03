@@ -2,10 +2,8 @@
 #include <common/list.h>
 #include <common/rbtree.h>
 #include <common/sem.h>
-#include <common/list.h>
 #include <fs/block_device.h>
 #include <fs/defines.h>
-#include <common/sem.h>
 
 // maximum number of distinct blocks that one atomic operation can hold.
 #define OP_MAX_NUM_BLOCKS 10
@@ -24,12 +22,12 @@ typedef struct {
     usize block_no;
     ListNode node;
     struct rb_node_ rb_node;
-    bool acquired;   // is the block already acquired by some thread?
-    usize pinned;     // if a block is pinned, it should not be evicted from the
-                     // cache.
+    bool acquired;  // is the block already acquired by some thread?
+    usize pinned;   // if a block is pinned, it should not be evicted from the
+                    // cache.
     Semaphore sem;  // this lock protects `valid` and `data`.
-    SleepLock lock;  // this lock protects `valid` and `data`.
-    bool valid;      // is the content of block loaded from disk?
+    SleepLock lock; // this lock protects `valid` and `data`.
+    bool valid;     // is the content of block loaded from disk?
     u8 data[BLOCK_SIZE];
 } Block;
 
@@ -39,7 +37,8 @@ typedef struct {
     usize rm;
     // hint: you may want to add something else here.
 
-    struct rb_root_ synced; // the list of all synced block, order by block_no, distinct
+    struct rb_root_
+        synced; // the list of all synced block, order by block_no, distinct
 } OpContext;
 
 typedef struct BlockCache {
@@ -50,11 +49,11 @@ typedef struct BlockCache {
 
     // read the content of block at `block_no` from disk, and lock the block.
     // return the pointer to the locked block.
-    Block* (*acquire)(usize block_no);
+    Block *(*acquire)(usize block_no);
 
     // unlock `block`.
     // NOTE: it does not need to write the block content back to disk.
-    void (*release)(Block* block);
+    void (*release)(Block *block);
 
     // NOTES FOR ATOMIC OPERATIONS
     //
@@ -70,7 +69,7 @@ typedef struct BlockCache {
     // begin a new atomic operation and initialize `ctx`.
     // `OpContext` represents an outstanding atomic operation. You can mark the
     // end of atomic operation by `end_op`.
-    void (*begin_op)(OpContext* ctx);
+    void (*begin_op)(OpContext *ctx);
 
     // synchronize the content of `block` to disk.
     // `ctx` can be NULL, which indicates this operation does not belong to any
@@ -82,11 +81,11 @@ typedef struct BlockCache {
     // NOTE: the caller must hold the lock of `block`.
     // NOTE: if the number of blocks associated with `ctx` is larger than
     // `OP_MAX_NUM_BLOCKS` after `sync`, `sync` should panic.
-    void (*sync)(OpContext* ctx, Block* block);
+    void (*sync)(OpContext *ctx, Block *block);
 
     // end the atomic operation managed by `ctx`.
     // it returns when all associated blocks are persisted to disk.
-    void (*end_op)(OpContext* ctx);
+    void (*end_op)(OpContext *ctx);
 
     // NOTES FOR BITMAP
     //
@@ -101,16 +100,16 @@ typedef struct BlockCache {
     // block. block number is returned.
     //
     // NOTE: if there's no free block on disk, `alloc` should panic.
-    usize (*alloc)(OpContext* ctx);
+    usize (*alloc)(OpContext *ctx);
 
     // mark block at `block_no` is free in bitmap.
-    void (*free)(OpContext* ctx, usize block_no);
+    void (*free)(OpContext *ctx, usize block_no);
 } BlockCache;
 
 extern BlockCache bcache;
 
-void init_bcache(const SuperBlock* sblock, const BlockDevice* device);
-usize BBLOCK(usize block_no, const SuperBlock* sb);
-void bzero(OpContext* ctx, u32 block_no);
+void init_bcache(const SuperBlock *sblock, const BlockDevice *device);
+usize BBLOCK(usize block_no, const SuperBlock *sb);
+void bzero(OpContext *ctx, u32 block_no);
 void release_8_blocks(u32 bno);
 u32 find_and_set_8_blocks();

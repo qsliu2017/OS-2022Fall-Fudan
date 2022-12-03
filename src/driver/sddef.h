@@ -32,7 +32,7 @@
 #include <kernel/printk.h>
 
 // Private functions.
-static void sd_start(struct buf* b);
+static void sd_start(struct buf *b);
 static void sd_delayus(u32 cnt);
 static int sdInit();
 static void sdParseCID();
@@ -44,26 +44,26 @@ static int sdWaitForData();
 int fls_long(unsigned long x);
 
 // EMMC registers
-#define EMMC_ARG2 ((volatile unsigned int*)(MMIO_BASE + 0x00300000))
-#define EMMC_BLKSIZECNT ((volatile unsigned int*)(MMIO_BASE + 0x00300004))
-#define EMMC_ARG1 ((volatile unsigned int*)(MMIO_BASE + 0x00300008))
-#define EMMC_CMDTM ((volatile unsigned int*)(MMIO_BASE + 0x0030000C))
-#define EMMC_RESP0 ((volatile unsigned int*)(MMIO_BASE + 0x00300010))
-#define EMMC_RESP1 ((volatile unsigned int*)(MMIO_BASE + 0x00300014))
-#define EMMC_RESP2 ((volatile unsigned int*)(MMIO_BASE + 0x00300018))
-#define EMMC_RESP3 ((volatile unsigned int*)(MMIO_BASE + 0x0030001C))
-#define EMMC_DATA ((volatile unsigned int*)(MMIO_BASE + 0x00300020))
-#define EMMC_STATUS ((volatile unsigned int*)(MMIO_BASE + 0x00300024))
-#define EMMC_CONTROL0 ((volatile unsigned int*)(MMIO_BASE + 0x00300028))
-#define EMMC_CONTROL1 ((volatile unsigned int*)(MMIO_BASE + 0x0030002C))
-#define EMMC_INTERRUPT ((volatile unsigned int*)(MMIO_BASE + 0x00300030))
-#define EMMC_IRPT_MASK ((volatile unsigned int*)(MMIO_BASE + 0x00300034))
-#define EMMC_IRPT_EN ((volatile unsigned int*)(MMIO_BASE + 0x00300038))
-#define EMMC_CONTROL2 ((volatile unsigned int*)(MMIO_BASE + 0x0030003C))
+#define EMMC_ARG2 ((volatile unsigned int *)(MMIO_BASE + 0x00300000))
+#define EMMC_BLKSIZECNT ((volatile unsigned int *)(MMIO_BASE + 0x00300004))
+#define EMMC_ARG1 ((volatile unsigned int *)(MMIO_BASE + 0x00300008))
+#define EMMC_CMDTM ((volatile unsigned int *)(MMIO_BASE + 0x0030000C))
+#define EMMC_RESP0 ((volatile unsigned int *)(MMIO_BASE + 0x00300010))
+#define EMMC_RESP1 ((volatile unsigned int *)(MMIO_BASE + 0x00300014))
+#define EMMC_RESP2 ((volatile unsigned int *)(MMIO_BASE + 0x00300018))
+#define EMMC_RESP3 ((volatile unsigned int *)(MMIO_BASE + 0x0030001C))
+#define EMMC_DATA ((volatile unsigned int *)(MMIO_BASE + 0x00300020))
+#define EMMC_STATUS ((volatile unsigned int *)(MMIO_BASE + 0x00300024))
+#define EMMC_CONTROL0 ((volatile unsigned int *)(MMIO_BASE + 0x00300028))
+#define EMMC_CONTROL1 ((volatile unsigned int *)(MMIO_BASE + 0x0030002C))
+#define EMMC_INTERRUPT ((volatile unsigned int *)(MMIO_BASE + 0x00300030))
+#define EMMC_IRPT_MASK ((volatile unsigned int *)(MMIO_BASE + 0x00300034))
+#define EMMC_IRPT_EN ((volatile unsigned int *)(MMIO_BASE + 0x00300038))
+#define EMMC_CONTROL2 ((volatile unsigned int *)(MMIO_BASE + 0x0030003C))
 // #define EMMC_BOOT_TIMEOUT   ((volatile unsigned int*)(MMIO_BASE+0x00300070))
 // #define EMMC_EXRDFIFO_EN    ((volatile unsigned int*)(MMIO_BASE+0x00300084))
 // #define EMMC_SPI_INT_SPT    ((volatile unsigned int*)(MMIO_BASE+0x003000f0))
-#define EMMC_SLOTISR_VER ((volatile unsigned int*)(MMIO_BASE + 0x003000fc))
+#define EMMC_SLOTISR_VER ((volatile unsigned int *)(MMIO_BASE + 0x003000fc))
 
 // This register is not available on the Pi.
 // #define EMMC_HOST_CAPS      ((volatile unsigned int*)(MMIO_BASE+0x00300040))
@@ -107,11 +107,11 @@ int fls_long(unsigned long x);
 #define INT_BLOCK_GAP 0x00000004
 #define INT_DATA_DONE 0x00000002
 #define INT_CMD_DONE 0x00000001
-#define INT_ERROR_MASK                                                    \
-    (INT_CRC_ERROR | INT_END_ERROR | INT_INDEX_ERROR | INT_DATA_TIMEOUT | \
+#define INT_ERROR_MASK                                                         \
+    (INT_CRC_ERROR | INT_END_ERROR | INT_INDEX_ERROR | INT_DATA_TIMEOUT |      \
      INT_DATA_CRC_ERR | INT_DATA_END_ERR | INT_ERR | INT_AUTO_ERROR)
-#define INT_ALL_MASK                                               \
-    (INT_CMD_DONE | INT_DATA_DONE | INT_READ_RDY | INT_WRITE_RDY | \
+#define INT_ALL_MASK                                                           \
+    (INT_CMD_DONE | INT_DATA_DONE | INT_READ_RDY | INT_WRITE_RDY |             \
      INT_ERROR_MASK)
 
 // CONTROL register settings
@@ -129,8 +129,8 @@ int fls_long(unsigned long x);
 #define C1_CLK_STABLE 0x00000002
 #define C1_CLK_INTLEN 0x00000001
 
-#define FREQ_SETUP 400000     // 400 Khz
-#define FREQ_NORMAL 25000000  // 25 Mhz
+#define FREQ_SETUP 400000    // 400 Khz
+#define FREQ_NORMAL 25000000 // 25 Mhz
 
 // CONTROL2 values
 #define C2_VDD_18 0x00080000
@@ -156,9 +156,9 @@ int fls_long(unsigned long x);
 #define SR_DAT2 0x00400000
 #define SR_DAT1 0x00200000
 #define SR_DAT0 0x00100000
-#define SR_WRITE_PROT 0x00080000       // From SDHC spec v2, BCM says reserved
-#define SR_READ_AVAILABLE 0x00000800   // ???? undocumented
-#define SR_WRITE_AVAILABLE 0x00000400  // ???? undocumented
+#define SR_WRITE_PROT 0x00080000      // From SDHC spec v2, BCM says reserved
+#define SR_READ_AVAILABLE 0x00000800  // ???? undocumented
+#define SR_WRITE_AVAILABLE 0x00000400 // ???? undocumented
 #define SR_READ_TRANSFER 0x00000200
 #define SR_WRITE_TRANSFER 0x00000100
 #define SR_DAT_ACTIVE 0x00000004
@@ -173,35 +173,35 @@ int fls_long(unsigned long x);
 #define ACMD41_SDXC_POWER 0x10000000
 #define ACMD41_S18R 0x01000000
 #define ACMD41_VOLTAGE 0x00ff8000
-#define ACMD41_ARG_HC \
+#define ACMD41_ARG_HC                                                          \
     (ACMD41_HCS | ACMD41_SDXC_POWER | ACMD41_VOLTAGE | ACMD41_S18R)
 #define ACMD41_ARG_SC (ACMD41_VOLTAGE | ACMD41_S18R)
 
 // R1 (Status) values
-#define ST_OUT_OF_RANGE 0x80000000       // 31   E
-#define ST_ADDRESS_ERROR 0x40000000      // 30   E
-#define ST_BLOCK_LEN_ERROR 0x20000000    // 29   E
-#define ST_ERASE_SEQ_ERROR 0x10000000    // 28   E
-#define ST_ERASE_PARAM_ERROR 0x08000000  // 27   E
-#define ST_WP_VIOLATION 0x04000000       // 26   E
-#define ST_CARD_IS_LOCKED 0x02000000     // 25   E
-#define ST_LOCK_UNLOCK_FAIL 0x01000000   // 24   E
-#define ST_COM_CRC_ERROR 0x00800000      // 23   E
-#define ST_ILLEGAL_COMMAND 0x00400000    // 22   E
-#define ST_CARD_ECC_FAILED 0x00200000    // 21   E
-#define ST_CC_ERROR 0x00100000           // 20   E
-#define ST_ERROR 0x00080000              // 19   E
-#define ST_CSD_OVERWRITE 0x00010000      // 16   E
-#define ST_WP_ERASE_SKIP 0x00008000      // 15   E
-#define ST_CARD_ECC_DISABLED 0x00004000  // 14   E
-#define ST_ERASE_RESET 0x00002000        // 13   E
-#define ST_CARD_STATE 0x00001e00         // 12:9
-#define ST_READY_FOR_DATA 0x00000100     // 8
-#define ST_APP_CMD 0x00000020            // 5
-#define ST_AKE_SEQ_ERROR 0x00000004      // 3    E
+#define ST_OUT_OF_RANGE 0x80000000      // 31   E
+#define ST_ADDRESS_ERROR 0x40000000     // 30   E
+#define ST_BLOCK_LEN_ERROR 0x20000000   // 29   E
+#define ST_ERASE_SEQ_ERROR 0x10000000   // 28   E
+#define ST_ERASE_PARAM_ERROR 0x08000000 // 27   E
+#define ST_WP_VIOLATION 0x04000000      // 26   E
+#define ST_CARD_IS_LOCKED 0x02000000    // 25   E
+#define ST_LOCK_UNLOCK_FAIL 0x01000000  // 24   E
+#define ST_COM_CRC_ERROR 0x00800000     // 23   E
+#define ST_ILLEGAL_COMMAND 0x00400000   // 22   E
+#define ST_CARD_ECC_FAILED 0x00200000   // 21   E
+#define ST_CC_ERROR 0x00100000          // 20   E
+#define ST_ERROR 0x00080000             // 19   E
+#define ST_CSD_OVERWRITE 0x00010000     // 16   E
+#define ST_WP_ERASE_SKIP 0x00008000     // 15   E
+#define ST_CARD_ECC_DISABLED 0x00004000 // 14   E
+#define ST_ERASE_RESET 0x00002000       // 13   E
+#define ST_CARD_STATE 0x00001e00        // 12:9
+#define ST_READY_FOR_DATA 0x00000100    // 8
+#define ST_APP_CMD 0x00000020           // 5
+#define ST_AKE_SEQ_ERROR 0x00000004     // 3    E
 
 #define R1_CARD_STATE_SHIFT 9
-#define R1_ERRORS_MASK 0xfff9c004  // All above bits which indicate errors.
+#define R1_ERRORS_MASK 0xfff9c004 // All above bits which indicate errors.
 
 // R3 (ACMD41 APP_SEND_OP_COND)
 #define R3_COMPLETE 0x80000000
@@ -214,35 +214,35 @@ int fls_long(unsigned long x);
 #define R6_STATE_MASK 0x00001e00
 
 // Card state values as they appear in the status register.
-#define CS_IDLE 0   // 0x00000000
-#define CS_READY 1  // 0x00000200
-#define CS_IDENT 2  // 0x00000400
-#define CS_STBY 3   // 0x00000600
-#define CS_TRAN 4   // 0x00000800
-#define CS_DATA 5   // 0x00000a00
-#define CS_RCV 6    // 0x00000c00
-#define CS_PRG 7    // 0x00000e00
-#define CS_DIS 8    // 0x00001000
+#define CS_IDLE 0  // 0x00000000
+#define CS_READY 1 // 0x00000200
+#define CS_IDENT 2 // 0x00000400
+#define CS_STBY 3  // 0x00000600
+#define CS_TRAN 4  // 0x00000800
+#define CS_DATA 5  // 0x00000a00
+#define CS_RCV 6   // 0x00000c00
+#define CS_PRG 7   // 0x00000e00
+#define CS_DIS 8   // 0x00001000
 
 // Response types.
 // Note that on the PI, the index and CRC are dropped, leaving 32 bits in RESP0.
-#define RESP_NO 0  // No response
-#define RESP_R1 1  // 48  RESP0    contains card status
-#define RESP_R1b \
-    11  // 48  RESP0    contains card status, data line indicates busy
-#define RESP_R2I \
-    2  // 136 RESP0..3 contains 128 bit CID shifted down by 8 bits as no CRC
-#define RESP_R2S \
-    12  // 136 RESP0..3 contains 128 bit CSD shifted down by 8 bits as no CRC
-#define RESP_R3 3  // 48  RESP0    contains OCR register
-#define RESP_R6 6  // 48  RESP0    contains RCA and status bits 23,22,19,12:0
-#define RESP_R7 7  // 48  RESP0    contains voltage acceptance and check pattern
+#define RESP_NO 0 // No response
+#define RESP_R1 1 // 48  RESP0    contains card status
+#define RESP_R1b                                                               \
+    11 // 48  RESP0    contains card status, data line indicates busy
+#define RESP_R2I                                                               \
+    2 // 136 RESP0..3 contains 128 bit CID shifted down by 8 bits as no CRC
+#define RESP_R2S                                                               \
+    12 // 136 RESP0..3 contains 128 bit CSD shifted down by 8 bits as no CRC
+#define RESP_R3 3 // 48  RESP0    contains OCR register
+#define RESP_R6 6 // 48  RESP0    contains RCA and status bits 23,22,19,12:0
+#define RESP_R7 7 // 48  RESP0    contains voltage acceptance and check pattern
 
 #define RCA_NO 1
 #define RCA_YES 2
 
 typedef struct EMMCCommand {
-    const char* name;
+    const char *name;
     unsigned int code;
     unsigned char resp;
     unsigned char rca;
@@ -291,7 +291,7 @@ static EMMCCommand sdCommandTable[] = {
 
     // APP commands must be prefixed by an APP_CMD.
     {"SET_BUS_WIDTH", 0x06000000 | CMD_RSPNS_48, RESP_R1, RCA_NO, 0},
-    {"SD_STATUS", 0x0D000000 | CMD_RSPNS_48, RESP_R1, RCA_YES, 0},  // RCA???
+    {"SD_STATUS", 0x0D000000 | CMD_RSPNS_48, RESP_R1, RCA_YES, 0}, // RCA???
     {"SEND_NUM_WRBL", 0x16000000 | CMD_RSPNS_48, RESP_R1, RCA_NO, 0},
     {"SEND_NUM_ERS", 0x17000000 | CMD_RSPNS_48, RESP_R1, RCA_NO, 0},
     {"SD_SENDOPCOND", 0x29000000 | CMD_RSPNS_48, RESP_R3, RCA_NO, 1000},
@@ -331,7 +331,7 @@ static EMMCCommand sdCommandTable[] = {
 #define IX_ERASE 27
 #define IX_LOCK_UNLOCK 28
 #define IX_APP_CMD 29
-#define IX_APP_CMD_RCA 30  // APP_CMD used once we have the RCA.
+#define IX_APP_CMD_RCA 30 // APP_CMD used once we have the RCA.
 #define IX_GEN_CMD 31
 
 // Commands hereafter require APP_CMD.
@@ -422,9 +422,9 @@ static EMMCCommand sdCommandTable[] = {
 #define SCR_SD_SECURITY 0x00007000
 #define SCR_SD_SEC_NONE 0x00000000
 #define SCR_SD_SEC_NOT_USED 0x00001000
-#define SCR_SD_SEC_101 0x00002000  // SDSC
-#define SCR_SD_SEC_2 0x00003000    // SDHC
-#define SCR_SD_SEC_3 0x00004000    // SDXC
+#define SCR_SD_SEC_101 0x00002000 // SDSC
+#define SCR_SD_SEC_2 0x00003000   // SDHC
+#define SCR_SD_SEC_3 0x00004000   // SDXC
 
 #define SCR_SD_BUS_WIDTHS 0x00000f00
 #define SCR_SD_BUS_WIDTH_1 0x00000100
@@ -465,7 +465,7 @@ static EMMCCommand sdCommandTable[] = {
 #define SD_TYPE_2_SC 3
 #define SD_TYPE_2_HC 4
 
-static const char* SD_TYPE_NAME[] = {"Unknown", "MMC", "Type 1", "Type 2 SC",
+static const char *SD_TYPE_NAME[] = {"Unknown", "MMC", "Type 1", "Type 2 SC",
                                      "Type 2 HC"};
 
 // SD card functions supported values.
@@ -494,7 +494,7 @@ typedef struct SDDescriptor {
     unsigned int cardState;
     unsigned int status;
 
-    EMMCCommand* lastCmd;
+    EMMCCommand *lastCmd;
     unsigned int lastArg;
 } SDDescriptor;
 
@@ -599,7 +599,7 @@ static int sdWaitForData() {
 }
 
 /* Send command and handle response. */
-static int sdSendCommandP(EMMCCommand* cmd, int arg) {
+static int sdSendCommandP(EMMCCommand *cmd, int arg) {
     // Check for command in progress
     if (sdWaitForCommand() != 0)
         return SD_BUSY;
@@ -644,65 +644,63 @@ static int sdSendCommandP(EMMCCommand* cmd, int arg) {
 
     // Handle response types.
     switch (cmd->resp) {
-            // No response.
-        case RESP_NO:
-            return SD_OK;
+        // No response.
+    case RESP_NO:
+        return SD_OK;
 
-            // RESP0 contains card status, no other data from the RESP*
-            // registers. Return value non-zero if any error flag in the status
-            // value.
-        case RESP_R1:
-        case RESP_R1b:
-            sdCard.status = (u32)resp0;
-            // Store the card state.  Note that this is the state the card was
-            // in before the command was accepted, not the new state.
-            sdCard.cardState = (resp0 & ST_CARD_STATE) >> R1_CARD_STATE_SHIFT;
-            return resp0 & (int)R1_ERRORS_MASK;
+        // RESP0 contains card status, no other data from the RESP*
+        // registers. Return value non-zero if any error flag in the status
+        // value.
+    case RESP_R1:
+    case RESP_R1b:
+        sdCard.status = (u32)resp0;
+        // Store the card state.  Note that this is the state the card was
+        // in before the command was accepted, not the new state.
+        sdCard.cardState = (resp0 & ST_CARD_STATE) >> R1_CARD_STATE_SHIFT;
+        return resp0 & (int)R1_ERRORS_MASK;
 
-            // RESP0..3 contains 128 bit CID or CSD shifted down by 8 bits as no
-            // CRC Note: highest bits are in RESP3.
-        case RESP_R2I:
-        case RESP_R2S:
-            sdCard.status = 0;
-            unsigned int* data =
-                cmd->resp == RESP_R2I ? sdCard.cid : sdCard.csd;
-            data[0] = *EMMC_RESP3;
-            data[1] = *EMMC_RESP2;
-            data[2] = *EMMC_RESP1;
-            data[3] = (u32)resp0;
-            return SD_OK;
+        // RESP0..3 contains 128 bit CID or CSD shifted down by 8 bits as no
+        // CRC Note: highest bits are in RESP3.
+    case RESP_R2I:
+    case RESP_R2S:
+        sdCard.status = 0;
+        unsigned int *data = cmd->resp == RESP_R2I ? sdCard.cid : sdCard.csd;
+        data[0] = *EMMC_RESP3;
+        data[1] = *EMMC_RESP2;
+        data[2] = *EMMC_RESP1;
+        data[3] = (u32)resp0;
+        return SD_OK;
 
-            // RESP0 contains OCR register
-            // TODO: What is the correct time to wait for this?
-        case RESP_R3:
-            sdCard.status = 0;
-            sdCard.ocr = (u32)resp0;
-            return SD_OK;
+        // RESP0 contains OCR register
+        // TODO: What is the correct time to wait for this?
+    case RESP_R3:
+        sdCard.status = 0;
+        sdCard.ocr = (u32)resp0;
+        return SD_OK;
 
-            // RESP0 contains RCA and status bits 23,22,19,12:0
-        case RESP_R6:
-            sdCard.rca = (u32)resp0 & R6_RCA_MASK;
-            sdCard.status =
-                (u32)((resp0 & 0x00001fff))  // 12:0 map directly to status 12:0
-                |
-                (u32)((resp0 & 0x00002000) << 6)  // 13 maps to status 19 ERROR
-                | (u32)((resp0 & 0x00004000)
-                        << 8)  // 14 maps to status 22 ILLEGAL_COMMAND
-                | (u32)((resp0 & 0x00008000)
-                        << 8);  // 15 maps to status 23 COM_CRC_ERROR
-            // Store the card state.  Note that this is the state the card was
-            // in before the command was accepted, not the new state.
-            sdCard.cardState = (resp0 & ST_CARD_STATE) >> R1_CARD_STATE_SHIFT;
-            return (int)(sdCard.status & R1_ERRORS_MASK);
+        // RESP0 contains RCA and status bits 23,22,19,12:0
+    case RESP_R6:
+        sdCard.rca = (u32)resp0 & R6_RCA_MASK;
+        sdCard.status =
+            (u32)((resp0 & 0x00001fff)) // 12:0 map directly to status 12:0
+            | (u32)((resp0 & 0x00002000) << 6) // 13 maps to status 19 ERROR
+            | (u32)((resp0 & 0x00004000)
+                    << 8) // 14 maps to status 22 ILLEGAL_COMMAND
+            | (u32)((resp0 & 0x00008000)
+                    << 8); // 15 maps to status 23 COM_CRC_ERROR
+        // Store the card state.  Note that this is the state the card was
+        // in before the command was accepted, not the new state.
+        sdCard.cardState = (resp0 & ST_CARD_STATE) >> R1_CARD_STATE_SHIFT;
+        return (int)(sdCard.status & R1_ERRORS_MASK);
 
-            // RESP0 contains voltage acceptance and check pattern, which should
-            // match the argument.
-        case RESP_R7:
-            sdCard.status = 0;
-            return resp0 == arg ? SD_OK : SD_ERROR;
-        default:
-            printk("Unexpected response.\n");
-            PANIC();
+        // RESP0 contains voltage acceptance and check pattern, which should
+        // match the argument.
+    case RESP_R7:
+        sdCard.status = 0;
+        return resp0 == arg ? SD_OK : SD_ERROR;
+    default:
+        printk("Unexpected response.\n");
+        PANIC();
     }
 
     return SD_ERROR;
@@ -740,7 +738,7 @@ static int sdSendCommand(int index) {
         return sdDebugResponse(resp);
 
     // Get the command and set RCA if required.
-    EMMCCommand* cmd = &sdCommandTable[index];
+    EMMCCommand *cmd = &sdCommandTable[index];
     int arg = 0;
     if (cmd->rca == RCA_YES)
         arg = (int)sdCard.rca;
@@ -888,19 +886,19 @@ static u32 sdGetClockDivider(u32 freq) {
     else
         divisor = (1u << shiftcount);
 
-    if (divisor <= 2) {  // Too dangerous to go for divisor 1 unless you test
-        divisor = 2;     // You can't take divisor below 2 on slow cards
-        shiftcount = 0;  // Match shift to above just for debug notification
+    if (divisor <= 2) { // Too dangerous to go for divisor 1 unless you test
+        divisor = 2;    // You can't take divisor below 2 on slow cards
+        shiftcount = 0; // Match shift to above just for debug notification
     }
 
     printk("- Divisor selected = %u, pow 2 shift count = %u\n", divisor,
            shiftcount);
     u32 hi = 0;
     if (sdHostVer > HOST_SPEC_V2)
-        hi = (divisor & 0x300) >> 2;  // Only 10 bits on Hosts specs above 2
-    u32 lo = (divisor & 0x0ff);       // Low part always valid
-    u32 cdiv = (lo << 8) + hi;        // Join and roll to position
-    return cdiv;                      // Return cdiv
+        hi = (divisor & 0x300) >> 2; // Only 10 bits on Hosts specs above 2
+    u32 lo = (divisor & 0x0ff);      // Low part always valid
+    u32 cdiv = (lo << 8) + hi;       // Join and roll to position
+    return cdiv;                     // Return cdiv
 }
 
 /* Set the SD clock to the given frequency. */
@@ -910,10 +908,9 @@ static int sdSetClock(int freq) {
     while ((*EMMC_STATUS & (SR_CMD_INHIBIT | SR_DAT_INHIBIT)) && --count)
         sd_delayus(1);
     if (count <= 0) {
-        printk(
-            "* EMMC ERROR: Set clock: timeout waiting for inhibit flags. "
-            "Status %08x.\n",
-            *EMMC_STATUS);
+        printk("* EMMC ERROR: Set clock: timeout waiting for inhibit flags. "
+               "Status %08x.\n",
+               *EMMC_STATUS);
         return SD_ERROR_CLOCK;
     }
 
@@ -949,7 +946,7 @@ static int sdResetCard(int resetType) {
     int resp, count;
 
     // Send reset host controller and wait for complete.
-    *EMMC_CONTROL0 = 0;  // C0_SPI_MODE_EN;
+    *EMMC_CONTROL0 = 0; // C0_SPI_MODE_EN;
     //  *EMMC_CONTROL2 = 0;
     *EMMC_CONTROL1 |= (u32)resetType;
     //*EMMC_CONTROL1 &= ~(C1_CLK_EN|C1_CLK_INTLEN);

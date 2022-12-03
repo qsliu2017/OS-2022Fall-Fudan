@@ -9,9 +9,7 @@ static WARN_RESULT ALWAYS_INLINE int cpuid() {
 }
 
 // instruct compiler not to reorder instructions around the fence.
-static ALWAYS_INLINE void compiler_fence() {
-    asm volatile("" ::: "memory");
-}
+static ALWAYS_INLINE void compiler_fence() { asm volatile("" ::: "memory"); }
 
 static WARN_RESULT ALWAYS_INLINE u64 get_clock_frequency() {
     u64 result;
@@ -28,14 +26,10 @@ static WARN_RESULT ALWAYS_INLINE u64 get_timestamp() {
 }
 
 // instruction synchronization barrier.
-static ALWAYS_INLINE void arch_isb() {
-    asm volatile("isb" ::: "memory");
-}
+static ALWAYS_INLINE void arch_isb() { asm volatile("isb" ::: "memory"); }
 
 // data synchronization barrier.
-static ALWAYS_INLINE void arch_dsb_sy() {
-    asm volatile("dsb sy" ::: "memory");
-}
+static ALWAYS_INLINE void arch_dsb_sy() { asm volatile("dsb sy" ::: "memory"); }
 
 static ALWAYS_INLINE void arch_fence() {
     arch_dsb_sy();
@@ -43,7 +37,7 @@ static ALWAYS_INLINE void arch_fence() {
 }
 
 /* Data cache clean and invalidate by virtual address to point of coherency. */
-static ALWAYS_INLINE void arch_dccivac(void* p, int n) {
+static ALWAYS_INLINE void arch_dccivac(void *p, int n) {
     while (n--)
         asm volatile("dc civac, %[x]" : : [x] "r"(p + n));
 }
@@ -54,13 +48,13 @@ static ALWAYS_INLINE void arch_dccivac(void* p, int n) {
 
 static ALWAYS_INLINE void device_put_u32(u64 addr, u32 value) {
     compiler_fence();
-    *(volatile u32*)addr = value;
+    *(volatile u32 *)addr = value;
     compiler_fence();
 }
 
 static WARN_RESULT ALWAYS_INLINE u32 device_get_u32(u64 addr) {
     compiler_fence();
-    u32 value = *(volatile u32*)addr;
+    u32 value = *(volatile u32 *)addr;
     compiler_fence();
     return value;
 }
@@ -91,7 +85,7 @@ static WARN_RESULT ALWAYS_INLINE u64 arch_get_elr() {
 }
 
 // set vector base (virtual) address register (EL1).
-static ALWAYS_INLINE void arch_set_vbar(void* ptr) {
+static ALWAYS_INLINE void arch_set_vbar(void *ptr) {
     arch_fence();
     asm volatile("msr vbar_el1, %[x]" : : [x] "r"(ptr));
     arch_fence();
@@ -179,24 +173,16 @@ static inline void arch_set_tid0(u64 tid) {
 }
 
 // set-event instruction.
-static ALWAYS_INLINE void arch_sev() {
-    asm volatile("sev" ::: "memory");
-}
+static ALWAYS_INLINE void arch_sev() { asm volatile("sev" ::: "memory"); }
 
 // wait-for-event instruction.
-static ALWAYS_INLINE void arch_wfe() {
-    asm volatile("wfe" ::: "memory");
-}
+static ALWAYS_INLINE void arch_wfe() { asm volatile("wfe" ::: "memory"); }
 
 // wait-for-interrupt instruction.
-static ALWAYS_INLINE void arch_wfi() {
-    asm volatile("wfi" ::: "memory");
-}
+static ALWAYS_INLINE void arch_wfi() { asm volatile("wfi" ::: "memory"); }
 
 // yield instruction.
-static ALWAYS_INLINE void arch_yield() {
-    asm volatile("yield" ::: "memory");
-}
+static ALWAYS_INLINE void arch_yield() { asm volatile("yield" ::: "memory"); }
 
 static inline WARN_RESULT bool _arch_enable_trap() {
     u64 t;
@@ -216,8 +202,9 @@ static inline WARN_RESULT bool _arch_disable_trap() {
     return true;
 }
 
-#define arch_with_trap \
-    for (int __t_e = _arch_enable_trap(), __t_i = 0; __t_i < 1; __t_i++, __t_e || _arch_disable_trap())
+#define arch_with_trap                                                         \
+    for (int __t_e = _arch_enable_trap(), __t_i = 0; __t_i < 1;                \
+         __t_i++, __t_e || _arch_disable_trap())
 
 static ALWAYS_INLINE NO_RETURN void arch_stop_cpu() {
     while (1)
@@ -231,6 +218,7 @@ static inline void delay(i32 count) {
 }
 void delay_us(u64 n);
 
-#define set_return_addr(addr) \
-    (compiler_fence(), ((volatile u64*)__builtin_frame_address(0))[1] = (u64)(addr), \
+#define set_return_addr(addr)                                                  \
+    (compiler_fence(),                                                         \
+     ((volatile u64 *)__builtin_frame_address(0))[1] = (u64)(addr),            \
      compiler_fence())

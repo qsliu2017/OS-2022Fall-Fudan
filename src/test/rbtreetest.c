@@ -30,7 +30,8 @@ void rbtree_test() {
         p[cid][i].key = cid * 100000 + i;
         p[cid][i].data = -p[cid][i].key;
     }
-    if (cid == 0) init_spinlock(&lock);
+    if (cid == 0)
+        init_spinlock(&lock);
     arch_dsb_sy();
     _increment_rc(&x);
     while (x.count < 4)
@@ -40,7 +41,8 @@ void rbtree_test() {
         setup_checker(0);
         acquire_spinlock(0, &lock);
         int ok = _rb_insert(&p[cid][i].node, &rt, rb_cmp);
-        if (ok) FAIL("insert failed!\n");
+        if (ok)
+            FAIL("insert failed!\n");
         release_spinlock(0, &lock);
     }
     for (int i = 0; i < 1000; i++) {
@@ -48,7 +50,8 @@ void rbtree_test() {
         acquire_spinlock(0, &lock);
         tmp.key = cid * 100000 + i;
         rb_node np = _rb_lookup(&tmp.node, &rt, rb_cmp);
-        if (np == NULL) FAIL("NULL\n");
+        if (np == NULL)
+            FAIL("NULL\n");
         if (tmp.key != -container_of(np, struct mytype, node)->data) {
             FAIL("data error! %d %d %d\n", tmp.key,
                  container_of(np, struct mytype, node)->key,
@@ -61,5 +64,6 @@ void rbtree_test() {
     while (x.count < 8)
         ;
     arch_dsb_sy();
-    if (cid == 0) printk("rbtree_test PASS\n");
+    if (cid == 0)
+        printk("rbtree_test PASS\n");
 }

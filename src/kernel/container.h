@@ -6,8 +6,7 @@
 
 #define NLOCAL 512
 
-struct container
-{
+struct container {
     struct container *parent;
     struct proc *rootproc;
 

@@ -4,24 +4,15 @@
 #include <common/list.h>
 #include <common/rbtree.h>
 #include <common/sem.h>
-#include <kernel/schinfo.h>
-#include <kernel/pt.h>
 #include <kernel/container.h>
+#include <kernel/pt.h>
+#include <kernel/schinfo.h>
 
 #define NPROC 128
 
-enum procstate
-{
-    UNUSED,
-    RUNNABLE,
-    RUNNING,
-    SLEEPING,
-    DEEPSLEEPING,
-    ZOMBIE
-};
+enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, DEEPSLEEPING, ZOMBIE };
 
-typedef struct UserContext
-{
+typedef struct UserContext {
     /* When an exception causes a mode change, the core automatically
      * - saves the cpsr to the spsr of the exception mode
      * - saves the pc to the lr of the exception mode
@@ -67,8 +58,7 @@ typedef struct UserContext
 
 } UserContext;
 
-typedef struct KernelContext
-{
+typedef struct KernelContext {
     // x19-x30 are callee-saved register
 
     u64 x19; /* for new process, x19 is used as x30 */
@@ -86,8 +76,7 @@ typedef struct KernelContext
 
 } KernelContext;
 
-struct proc
-{
+struct proc {
     /* Constant fields */
 
     int localpid;
@@ -119,15 +108,9 @@ struct proc
 
 extern struct proc procs[NPROC];
 
-inline int get_pid(struct proc const *p)
-{
-    return p - procs;
-}
+inline int get_pid(struct proc const *p) { return p - procs; }
 
-inline struct proc *get_root_proc()
-{
-    return &procs[0];
-}
+inline struct proc *get_root_proc() { return &procs[0]; }
 
 WARN_RESULT struct proc *create_proc();
 int start_proc(struct proc *, void (*entry)(u64), u64 arg);

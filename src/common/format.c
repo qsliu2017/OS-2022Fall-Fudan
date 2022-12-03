@@ -2,7 +2,8 @@
 #include <common/format.h>
 #include <common/string.h>
 
-static void _print_int(PutCharFunc put_char, void *ctx, i64 u, int _base, bool is_signed) {
+static void _print_int(PutCharFunc put_char, void *ctx, i64 u, int _base,
+                       bool is_signed) {
     static char digit[] = "0123456789abcdef";
     static char buf[64];
 
@@ -25,10 +26,10 @@ static void _print_int(PutCharFunc put_char, void *ctx, i64 u, int _base, bool i
 void vformat(PutCharFunc put_char, void *ctx, const char *fmt, va_list arg) {
     const char *pos = fmt;
 
-#define _INT_CASE(ident, type, base, sign)                                                         \
-    else if (strncmp(pos, ident, sizeof(ident) - 1) == 0) {                                        \
-        _print_int(put_char, ctx, (i64)va_arg(arg, type), base, sign);                             \
-        pos += sizeof(ident) - 1;                                                                  \
+#define _INT_CASE(ident, type, base, sign)                                     \
+    else if (strncmp(pos, ident, sizeof(ident) - 1) == 0) {                    \
+        _print_int(put_char, ctx, (i64)va_arg(arg, type), base, sign);         \
+        pos += sizeof(ident) - 1;                                              \
     }
 
     char c;

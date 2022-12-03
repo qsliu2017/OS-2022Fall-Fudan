@@ -4,8 +4,7 @@
 
 #define NCPU 4
 
-struct timer
-{
+struct timer {
     bool triggered;
     int elapse;
     u64 _key;
@@ -16,8 +15,7 @@ struct timer
 
 #include <kernel/schinfo_cpu.h>
 
-struct cpu
-{
+struct cpu {
     bool online;
     struct rb_root_ timer;
     struct sched sched;

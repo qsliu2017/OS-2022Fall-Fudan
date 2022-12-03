@@ -6,8 +6,7 @@ static bool boot_secondary_cpus = false;
 
 NO_RETURN void idle_entry();
 
-void kernel_init()
-{
+void kernel_init() {
     extern char edata[], end[];
     memset(edata, 0, (usize)(end - edata));
     do_early_init();
@@ -15,14 +14,10 @@ void kernel_init()
     boot_secondary_cpus = true;
 }
 
-void main()
-{
-    if (cpuid() == 0)
-    {
+void main() {
+    if (cpuid() == 0) {
         kernel_init();
-    }
-    else
-    {
+    } else {
         while (!boot_secondary_cpus)
             ;
         arch_dsb_sy();

@@ -16,8 +16,8 @@
 #define IPC_CREATE 2
 #define IPC_EXCL 1
 #define IPC_NOWAIT 1
-#define MSG_MSGSZ (PAGE_SIZE-(int)sizeof(msg_msg))
-#define MSG_MSGSEGSZ (PAGE_SIZE-(int)sizeof(msg_msgseg))
+#define MSG_MSGSZ (PAGE_SIZE - (int)sizeof(msg_msg))
+#define MSG_MSGSEGSZ (PAGE_SIZE - (int)sizeof(msg_msgseg))
 #define MAX_MSGNUM 256
 typedef struct msg_queue {
     int key;
@@ -33,36 +33,36 @@ typedef struct ipc_ids {
     int in_use;
     unsigned short seq;
     SpinLock lock;
-    msg_queue* entries[16];
+    msg_queue *entries[16];
 } ipc_ids;
 typedef struct msgbuf {
     int mtype;
     char data[];
 } msgbuf;
 typedef struct msg_msgseg {
-    struct msg_msgseg* nxt;
+    struct msg_msgseg *nxt;
     char data[];
 } msg_msgseg;
 typedef struct msg_msg {
     ListNode node;
     int mtype;
     int size;
-    msg_msgseg* nxt;
+    msg_msgseg *nxt;
     char data[];
 } msg_msg;
 typedef struct msg_sender {
     ListNode node;
-    struct proc* proc;
+    struct proc *proc;
 } msg_sender;
 typedef struct msg_receiver {
     ListNode node;
-    struct proc* proc;
+    struct proc *proc;
     int mtype;
     int size;
-    msg_msg* r_msg;
+    msg_msg *r_msg;
 } msg_receiver;
 int sys_msgget(int key, int msgflg);
-int sys_msgsnd(int msgid, msgbuf* msgp, int msgsz, int msgflg);
-int sys_msgrcv(int msgid, msgbuf* msgp, int msgsz, int mtype, int msgflg);
+int sys_msgsnd(int msgid, msgbuf *msgp, int msgsz, int msgflg);
+int sys_msgrcv(int msgid, msgbuf *msgp, int msgsz, int mtype, int msgflg);
 int sys_msgctl(int msgid, int cmd);
 #endif
