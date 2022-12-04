@@ -71,20 +71,16 @@ void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags) {
     arch_tlbi_vmalle1is();
 }
 
-static struct pgdir *current;
-
-struct pgdir *current_pgdir() {
-    return current;
-}
+struct pgdir *_curpgdir = NULL;
 
 void attach_pgdir(struct pgdir *pgdir) {
     extern PTEntries invalid_pt;
     if (pgdir->pt) {
         arch_set_ttbr0(K2P(pgdir->pt));
-        current = pgdir;
+        _curpgdir = pgdir;
     } else {
         arch_set_ttbr0(K2P(&invalid_pt));
-        current = NULL;
+        _curpgdir = NULL;
     }
 }
 

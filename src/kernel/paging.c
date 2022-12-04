@@ -4,33 +4,19 @@
 #include <common/list.h>
 #include <common/sem.h>
 #include <common/string.h>
-#include <driver/sd.h>
-#include <fs/block_device.h>
-#include <fs/buf.h>
-#include <fs/cache.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
 #include <kernel/paging.h>
-#include <kernel/printk.h>
 #include <kernel/proc.h>
 #include <kernel/pt.h>
 #include <kernel/sched.h>
 
-#define N_SWAP_BLOCK (SWAP_END - SWAP_START)
-#define BLOCKS_PER_PAGE (PAGE_SIZE / BLOCK_SIZE)
-#define N_SWAP_PAGE (N_SWAP_BLOCK / BLOCKS_PER_PAGE)
-static Bitmap(swap_bitmap, N_SWAP_PAGE);
-
-define_rest_init(paging) {}
-
-extern struct pgdir *current_pgdir();
-
 // size is the number of page
 u64 sbrk(i64 size) {
-    auto pd = current_pgdir();
+    extern struct pgdir *_curpgdir;
     struct section *st = NULL;
-    _for_in_list(node, &pd->section_head) {
-        if (node == &pd->section_head)
+    _for_in_list(node, &_curpgdir->section_head) {
+        if (node == &_curpgdir->section_head)
             continue;
         st = container_of(node, struct section, stnode);
         if (st->flags & ST_HEAP)
@@ -63,22 +49,14 @@ void swapout(struct pgdir *pd, struct section *st) {
     st->flags |= ST_SWAP;
 
     for (u64 addr = st->begin; addr < st->end; addr += PAGE_SIZE) {
-        for (usize i = 0; i < N_SWAP_PAGE; i++) {
-            if (!bitmap_get(swap_bitmap, i)) {
-                bitmap_set(swap_bitmap, i);
-                for (int j = 0; j < BLOCKS_PER_PAGE; j++) {
-                    block_device.write(SWAP_START + i * BLOCKS_PER_PAGE + j,
-                                       (u8 *)addr + j * BLOCK_SIZE);
-                }
-                auto pte = get_pte(pd, addr, false);
-                ASSERT(pte);
-                kderef_page((void *)P2K(PAGE_BASE((u64)*pte)));
-                *pte &= 0xFFF;
-                *pte |= i << 12;
-                *pte &= ~PTE_VALID;
-                break;
-            }
-        }
+        u32 bno = write_page_to_disk((void *)addr);
+        ASSERT(bno);
+        auto pte = get_pte(pd, addr, false);
+        ASSERT(pte);
+        kderef_page((void *)P2K(PAGE_BASE((u64)*pte)));
+        *pte &= 0xFFF;
+        *pte |= (u64)bno << 12;
+        *pte &= ~PTE_VALID;
     }
 }
 // Free 8 continuous disk blocks
@@ -88,14 +66,10 @@ void swapin(struct pgdir *pd, struct section *st) {
     for (u64 va = st->begin; va < st->end; va += PAGE_SIZE) {
         auto pte = get_pte(pd, va, false);
         ASSERT(pte);
-        u32 idx = P2N(*pte);
+        u32 bno = P2N(*pte);
         auto p = kalloc_page();
         kref_page(p);
-        for (int i = 0; i < BLOCKS_PER_PAGE; i++) {
-            block_device.read(SWAP_START + idx * BLOCKS_PER_PAGE + i,
-                              (u8 *)p + i * BLOCK_SIZE);
-        }
-        bitmap_clear(swap_bitmap, idx);
+        read_page_from_disk(p, bno);
         *pte = K2P(p) | (*pte & 0xFFF) | PTE_VALID;
     }
 }
@@ -126,13 +100,15 @@ int pgfault(u64 iss) {
     ASSERT(st);
 
     auto pte = get_pte(pd, addr, false);
+    if (st->flags & ST_SWAP) {
+        swapin(pd, st);
+    }
     if (!pte || !*pte) {
         auto p = kalloc_page();
         kref_page(p);
         *get_pte(pd, addr, true) = K2P(p) | PTE_USER_DATA;
-    } else if (st->flags & ST_SWAP) {
-        swapin(pd, st);
-    } else if (*pte & PTE_RO) {
+    }
+    if (*pte & PTE_RO) {
         void *new_p = kalloc_page();
         kref_page(new_p);
         void *old_p = (void *)P2K(PAGE_BASE(*pte));

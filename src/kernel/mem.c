@@ -1,8 +1,11 @@
+#include <common/bitmap.h>
 #include <common/list.h>
 #include <common/rbtree.h>
 #include <common/rc.h>
+#include <common/sem.h>
 #include <common/string.h>
 #include <driver/memlayout.h>
+#include <fs/block_device.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
 #include <kernel/slab.h>
@@ -14,12 +17,14 @@ static void kinit_page();
 void init_slab();
 
 static void init_zero_page();
+static void init_swap();
 
 define_early_init(alloc_page_cnt) {
     init_rc(&alloc_page_cnt);
     kinit_page();
     init_slab();
     init_zero_page();
+    init_swap();
 }
 
 typedef struct Page {
@@ -122,12 +127,39 @@ bool check_zero_page() {
     return true;
 }
 
+#define N_SWAP_BLOCK (SWAP_END - SWAP_START)
+#define BLOCKS_PER_PAGE (PAGE_SIZE / BLOCK_SIZE)
+#define N_SWAP_PAGE (N_SWAP_BLOCK / BLOCKS_PER_PAGE)
+static Bitmap(swap_bitmap, N_SWAP_PAGE);
+static SleepLock swap_lock;
+
+static void init_swap() { init_sleeplock(&swap_lock); }
+
 u32 write_page_to_disk(void *ka) {
-    UNUSE(ka);
-    return 0;
+    raii_acquire_sleeplock(&swap_lock, write);
+    u32 bno = 0;
+    for (usize i = 0; i < N_SWAP_PAGE; i++) {
+        if (!bitmap_get(swap_bitmap, i)) {
+            bitmap_set(swap_bitmap, i);
+            bno = SWAP_START + i * BLOCKS_PER_PAGE;
+            break;
+        }
+    }
+    if (bno) {
+        for (usize i = 0; i < BLOCKS_PER_PAGE; i++) {
+            block_device.write(bno + i, (u8 *)ka + i * BLOCK_SIZE);
+        }
+    }
+    return bno;
 }
 
 void read_page_from_disk(void *ka, u32 bno) {
-    UNUSE(ka);
-    UNUSE(bno);
+    ASSERT(SWAP_START <= bno && bno < SWAP_END);
+    raii_acquire_sleeplock(&swap_lock, read);
+    for (usize i = 0; i < BLOCKS_PER_PAGE; i++) {
+        block_device.read(bno + i, (u8 *)ka + i * BLOCK_SIZE);
+    }
+    usize index = (bno - SWAP_START) / BLOCKS_PER_PAGE;
+    ASSERT(bitmap_get(swap_bitmap, index));
+    bitmap_clear(swap_bitmap, index);
 }

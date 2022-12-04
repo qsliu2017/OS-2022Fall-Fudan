@@ -59,5 +59,5 @@ SleepLock *_raii_acquire_sleeplock(SleepLock *lock);
 void _raii_release_sleeplock(SleepLock **lock);
 #define raii_acquire_sleeplock(lock, id)                                       \
     SleepLock *_raii_sleeplock_##id                                            \
-        __attribute__((__cleanup__(_raii_release_sleeplock))) =                \
+        __attribute__((__cleanup__(_raii_release_sleeplock), __unused__)) =    \
             _raii_acquire_sleeplock(lock)
