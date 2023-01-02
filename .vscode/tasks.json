@@ -3,6 +3,14 @@
 	"tasks": [
 		{
 			"type": "shell",
+			"label": "make fs test",
+			"command": "make",
+			"options": {
+				"cwd": "${workspaceFolder}/src/fs/test/build"
+			}
+		},
+		{
+			"type": "shell",
 			"label": "Qemu: debug",
 			"command": "make qemu-debug",
 			"isBackground": true,
