@@ -17,15 +17,17 @@ struct section {
     u64 begin;
     u64 end;
     ListNode stnode;
-    // struct file* fp;
-    // u64 offset;
-};
+    File* fp;  //pointer to file struct
+    u64    offset    //the offset in file
+    u64 length; //the length of mapped content in file
+}
 
 WARN_RESULT void *alloc_page_for_user();
 int pgfault(u64 iss);
-void swapout(struct pgdir *pd, struct section *st);
-void swapin(struct pgdir *pd, struct section *st);
-void *alloc_page_for_user();
-void init_sections(ListNode *section_head);
-void free_sections(struct pgdir *pd);
+void swapout(struct pgdir* pd, struct section* st);
+void swapin(struct pgdir* pd, struct section* st);
+void* alloc_page_for_user();
+void init_sections(ListNode* section_head);
+void free_sections(struct pgdir* pd);
+void copy_sections(ListNode* from_head, ListNode* to_head);
 u64 sbrk(i64 size);

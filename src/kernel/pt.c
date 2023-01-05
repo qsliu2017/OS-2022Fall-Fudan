@@ -90,3 +90,12 @@ void dump_pt(PTEntriesPtr pt) {
         if (pt[i] != NULL)
             printk("\tentry[%x]: 0x%llx\n", i, pt[i]);
 }
+/*
+ * Copy len bytes from p to user address va in page table pgdir.
+ * Allocate physical pages if required.
+ * Useful when pgdir is not the current page table.
+ */
+int copyout(struct pgdir* pd, void* va, void *p, usize len){
+    // TODO
+}
+

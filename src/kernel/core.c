@@ -29,11 +29,7 @@ NO_RETURN void kernel_entry() {
 
     do_rest_init();
 
-    pgfault_first_test();
-    pgfault_second_test();
-
-    while (1)
-        yield();
+    // TODO: map init.S to user space and trap_return to run icode
 }
 
 NO_INLINE NO_RETURN void _panic(const char *file, int line) {

@@ -9,6 +9,10 @@
 #include <kernel/schinfo.h>
 
 #define NPROC 128
+#include <fs/inode.h>
+#include <fs/file.h>
+
+#define NOFILE 1024 /* open files per process */
 
 enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, DEEPSLEEPING, ZOMBIE };
 
@@ -104,6 +108,8 @@ struct proc {
     struct rb_root_ exit_root;
     struct rb_node_ node; // owned by free rb_tree or parent
     struct container *container;
+    struct oftable oftable;
+    Inode* cwd; // current working dictionary
 };
 
 extern struct proc procs[NPROC];
@@ -121,3 +127,4 @@ WARN_RESULT int kill(int pid);
 void set_parent_to_this(struct proc *);
 
 void dump_proc(struct proc const *p);
+WARN_RESULT int fork();

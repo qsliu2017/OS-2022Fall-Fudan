@@ -197,3 +197,13 @@ void dump_proc(struct proc const *p) {
            p->killed, get_pid(p), p->exitcode, p->parent, p->kstack,
            p->ucontext, p->kcontext);
 }
+
+/*
+ * Create a new process copying p as the parent.
+ * Sets up stack to return as if from system call.
+ * Caller must set state of returned proc to RUNNABLE.
+ */
+void trap_return();
+int fork() {
+    /* TODO: Your code here. */
+}
