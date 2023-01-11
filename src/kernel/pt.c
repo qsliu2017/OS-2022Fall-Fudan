@@ -95,7 +95,6 @@ void dump_pt(PTEntriesPtr pt) {
  * Allocate physical pages if required.
  * Useful when pgdir is not the current page table.
  */
-int copyout(struct pgdir* pd, void* va, void *p, usize len){
+int copyout(struct pgdir *pd, void *va, void *p, usize len) {
     // TODO
 }
-

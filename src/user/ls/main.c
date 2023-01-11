@@ -42,7 +42,8 @@ void ls(char *path) {
     }
 
     if (S_ISREG(st.st_mode)) {
-        printf("%s %x %ld %ld\n", fmtname(path), st.st_mode, st.st_ino, st.st_size);
+        printf("%s %x %ld %ld\n", fmtname(path), st.st_mode, st.st_ino,
+               st.st_size);
     } else if (S_ISDIR(st.st_mode)) {
         if (strlen(path) + 1 + DIRSIZ + 1 > sizeof(buf)) {
             fprintf(stderr, "ls: path too long\n");
@@ -59,7 +60,8 @@ void ls(char *path) {
                     fprintf(stderr, "ls: cannot stat %s\n", buf);
                     continue;
                 }
-                printf("%s %x %ld %ld\n", fmtname(buf), st.st_mode, st.st_ino, st.st_size);
+                printf("%s %x %ld %ld\n", fmtname(buf), st.st_mode, st.st_ino,
+                       st.st_size);
             }
         }
     }
@@ -74,4 +76,3 @@ int main(int argc, char *argv[]) {
             ls(argv[i]);
     return 0;
 }
-

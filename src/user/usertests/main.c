@@ -86,7 +86,7 @@ void writetestbig(void) {
     }
 
     for (i = 0; i < INODE_MAX_BLOCKS; i++) {
-        ((int*)buf)[0] = i;
+        ((int *)buf)[0] = i;
         if (write(fd, buf, 512) != 512) {
             printf("error: write big file failed\n");
             exit(1);
@@ -114,8 +114,8 @@ void writetestbig(void) {
             printf("read failed %d\n", i);
             exit(1);
         }
-        if (((int*)buf)[0] != n) {
-            printf("read content of block %d is %d\n", n, ((int*)buf)[0]);
+        if (((int *)buf)[0] != n) {
+            printf("read content of block %d is %d\n", n, ((int *)buf)[0]);
             exit(1);
         }
         n++;
@@ -149,7 +149,7 @@ void createtest(void) {
     printf("many creates, followed by unlink; ok\n");
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     printf("usertests starting\n");
 
     opentest();

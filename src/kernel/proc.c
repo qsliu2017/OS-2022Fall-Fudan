@@ -203,6 +203,4 @@ void dump_proc(struct proc const *p) {
  * Sets up stack to return as if from system call.
  */
 void trap_return();
-int fork() {
-    /* TODO: Your code here. */
-}
+int fork() { /* TODO: Your code here. */ }

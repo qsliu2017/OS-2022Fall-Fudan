@@ -6,32 +6,29 @@
 
 #include <fcntl.h>
 
+#include "syscall.h"
 #include <aarch64/mmu.h>
 #include <common/defines.h>
 #include <common/spinlock.h>
+#include <common/string.h>
+#include <fs/file.h>
+#include <fs/fs.h>
+#include <fs/pipe.h>
+#include <kernel/mem.h>
+#include <kernel/paging.h>
 #include <kernel/printk.h>
 #include <kernel/proc.h>
 #include <kernel/sched.h>
-#include <kernel/printk.h>
-#include <kernel/mem.h>
-#include <kernel/paging.h>
-#include <fs/file.h>
-#include <fs/fs.h>
 #include <sys/syscall.h>
-#include <kernel/mem.h>
-#include "syscall.h"
-#include <fs/pipe.h>
-#include <common/string.h>
 
 struct iovec {
-    void* iov_base; /* Starting address. */
-    usize iov_len; /* Number of bytes to transfer. */
+    void *iov_base; /* Starting address. */
+    usize iov_len;  /* Number of bytes to transfer. */
 };
-
 
 // get the file object by fd
 // return null if the fd is invalid
-static struct file* fd2file(int fd) {
+static struct file *fd2file(int fd) {
     // TODO
 }
 
@@ -39,7 +36,7 @@ static struct file* fd2file(int fd) {
  * Allocate a file descriptor for the given file.
  * Takes over file reference from caller on success.
  */
-int fdalloc(struct file* f) {
+int fdalloc(struct file *f) {
     /* TODO: Lab10 Shell */
     return -1;
 }
@@ -53,7 +50,8 @@ define_syscall(ioctl, int fd, u64 request) {
 /*
  *	map addr to a file
  */
-define_syscall(mmap, void* addr, int length, int prot, int flags, int fd, int offset) {
+define_syscall(mmap, void *addr, int length, int prot, int flags, int fd,
+               int offset) {
     // TODO
 }
 
@@ -65,7 +63,7 @@ define_syscall(munmap, void *addr, size_t length) {
  * Get the parameters and call filedup.
  */
 define_syscall(dup, int fd) {
-    struct file* f = fd2file(fd);
+    struct file *f = fd2file(fd);
     if (!f)
         return -1;
     int fd = fdalloc(f);
@@ -78,8 +76,8 @@ define_syscall(dup, int fd) {
 /*
  * Get the parameters and call fileread.
  */
-define_syscall(read, int fd, char* buffer, int size) {
-    struct file* f = fd2file(fd);
+define_syscall(read, int fd, char *buffer, int size) {
+    struct file *f = fd2file(fd);
     if (!f || size <= 0 || !user_writeable(buffer, size))
         return -1;
     return fileread(f, buffer, size);
@@ -88,15 +86,15 @@ define_syscall(read, int fd, char* buffer, int size) {
 /*
  * Get the parameters and call filewrite.
  */
-define_syscall(write, int fd, char* buffer, int size) {
-    struct file* f = fd2file(fd);
+define_syscall(write, int fd, char *buffer, int size) {
+    struct file *f = fd2file(fd);
     if (!f || size <= 0 || !user_readable(buffer, size))
         return -1;
     return filewrite(f, buffer, size);
 }
 
 define_syscall(writev, int fd, struct iovec *iov, int iovcnt) {
-    struct file* f = fd2file(fd);
+    struct file *f = fd2file(fd);
     struct iovec *p;
     if (!f || iovcnt <= 0 || !user_readable(iov, sizeof(struct iovec) * iovcnt))
         return -1;
@@ -121,14 +119,15 @@ define_syscall(close, int fd) {
 /*
  * Get the parameters and call filestat.
  */
-define_syscall(fstat, int fd, struct stat* st) {
-    struct file* f = fd2file(fd);
+define_syscall(fstat, int fd, struct stat *st) {
+    struct file *f = fd2file(fd);
     if (!f || !user_writeable(st, sizeof(*st)))
         return -1;
     return filestat(f, st);
 }
 
-define_syscall(newfstatat, int dirfd, const char* path, struct stat* st, int flags) {
+define_syscall(newfstatat, int dirfd, const char *path, struct stat *st,
+               int flags) {
     if (!user_strlen(path, 256) || !user_writeable(st, sizeof(*st)))
         return -1;
     if (dirfd != AT_FDCWD) {
@@ -140,7 +139,7 @@ define_syscall(newfstatat, int dirfd, const char* path, struct stat* st, int fla
         return -1;
     }
 
-    Inode* ip;
+    Inode *ip;
     OpContext ctx;
     bcache.begin_op(&ctx);
     if ((ip = namei(path, &ctx)) == 0) {
@@ -166,15 +165,16 @@ define_syscall(newfstatat, int dirfd, const char* path, struct stat* st, int fla
  *
  * If type is directory, you should additionally handle "." and "..".
  */
-Inode* create(const char* path, short type, short major, short minor, OpContext* ctx) {
+Inode *create(const char *path, short type, short major, short minor,
+              OpContext *ctx) {
     /* TODO: Lab10 Shell */
     return 0;
 }
 
-define_syscall(openat, int dirfd, const char* path, int omode) {
+define_syscall(openat, int dirfd, const char *path, int omode) {
     int fd;
-    struct file* f;
-    Inode* ip;
+    struct file *f;
+    Inode *ip;
 
     if (!user_strlen(path, 256))
         return -1;
@@ -220,8 +220,8 @@ define_syscall(openat, int dirfd, const char* path, int omode) {
     return fd;
 }
 
-define_syscall(mkdirat, int dirfd, const char* path, int mode) {
-    Inode* ip;
+define_syscall(mkdirat, int dirfd, const char *path, int mode) {
+    Inode *ip;
     if (!user_strlen(path, 256))
         return -1;
     if (dirfd != AT_FDCWD) {
@@ -244,8 +244,8 @@ define_syscall(mkdirat, int dirfd, const char* path, int mode) {
     return 0;
 }
 
-define_syscall(mknodat, int dirfd, const char* path, int major, int minor) {
-    Inode* ip;
+define_syscall(mknodat, int dirfd, const char *path, int major, int minor) {
+    Inode *ip;
     if (!user_strlen(path, 256))
         return -1;
     if (dirfd != AT_FDCWD) {
@@ -265,7 +265,7 @@ define_syscall(mknodat, int dirfd, const char* path, int major, int minor) {
     return 0;
 }
 
-define_syscall(chdir, const char* path) {
+define_syscall(chdir, const char *path) {
     // TODO
     // change the cwd (current working dictionary) of current process to 'path'
     // you may need to do some validations

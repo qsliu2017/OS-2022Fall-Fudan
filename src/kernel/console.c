@@ -1,17 +1,16 @@
-#include<kernel/console.h>
-#include<kernel/init.h>
-#include<aarch64/intrinsic.h>
-#include<kernel/sched.h>
-#include<driver/uart.h>
+#include <aarch64/intrinsic.h>
+#include <driver/uart.h>
+#include <kernel/console.h>
+#include <kernel/init.h>
+#include <kernel/sched.h>
 #define INPUT_BUF 128
 struct {
     char buf[INPUT_BUF];
-    usize r;  // Read index
-    usize w;  // Write index
-    usize e;  // Edit index
+    usize r; // Read index
+    usize w; // Write index
+    usize e; // Edit index
 } input;
-#define C(x)      ((x) - '@')  // Control-x
-
+#define C(x) ((x) - '@') // Control-x
 
 isize console_write(Inode *ip, char *buf, isize n) {
     // TODO

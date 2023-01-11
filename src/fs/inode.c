@@ -357,8 +357,8 @@ InodeTree inodes = {
  *   skipelem("a", name) = "", setting name = "a"
  *   skipelem("", name) = skipelem("////", name) = 0
  */
-static const char* skipelem(const char* path, char* name) {
-    const char* s;
+static const char *skipelem(const char *path, char *name) {
+    const char *s;
     int len;
 
     while (*path == '/')
@@ -386,17 +386,18 @@ static const char* skipelem(const char* path, char* name) {
  * path element into name, which must have room for DIRSIZ bytes.
  * Must be called inside a transaction since it calls iput().
  */
-static Inode* namex(const char* path, int nameiparent, char* name, OpContext* ctx) {
+static Inode *namex(const char *path, int nameiparent, char *name,
+                    OpContext *ctx) {
     /* TODO: Lab10 Shell */
     return 0;
 }
 
-Inode* namei(const char* path, OpContext* ctx) {
+Inode *namei(const char *path, OpContext *ctx) {
     char name[FILE_NAME_MAX_LENGTH];
     return namex(path, 0, name, ctx);
 }
 
-Inode* nameiparent(const char* path, char* name, OpContext* ctx) {
+Inode *nameiparent(const char *path, char *name, OpContext *ctx) {
     return namex(path, 1, name, ctx);
 }
 
@@ -404,7 +405,7 @@ Inode* nameiparent(const char* path, char* name, OpContext* ctx) {
  * Copy stat information from inode.
  * Caller must hold ip->lock.
  */
-void stati(Inode* ip, struct stat* st) {
+void stati(Inode *ip, struct stat *st) {
     st->st_dev = 1;
     st->st_ino = ip->inode_no;
     st->st_nlink = ip->entry.num_links;

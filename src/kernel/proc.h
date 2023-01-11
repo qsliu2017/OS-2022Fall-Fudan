@@ -9,8 +9,8 @@
 #include <kernel/schinfo.h>
 
 #define NPROC 128
-#include <fs/inode.h>
 #include <fs/file.h>
+#include <fs/inode.h>
 
 #define NOFILE 1024 /* open files per process */
 
@@ -109,7 +109,7 @@ struct proc {
     struct rb_node_ node; // owned by free rb_tree or parent
     struct container *container;
     struct oftable oftable;
-    Inode* cwd; // current working dictionary
+    Inode *cwd; // current working dictionary
 };
 
 extern struct proc procs[NPROC];
