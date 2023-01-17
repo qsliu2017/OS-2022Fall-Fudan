@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/spinlock.h"
 #include <common/defines.h>
 #include <common/list.h>
 #include <common/sem.h>
@@ -21,11 +22,14 @@ typedef struct file {
 } File;
 
 struct ftable {
+    File file[NFILE];
     // TODO: table of file objects in the system
 };
 
+#define NR_OPEN_DEFAULT 64
 struct oftable {
-    // TODO: table of opened file descriptors in a process
+    SpinLock lock;
+    File *file[NR_OPEN_DEFAULT];
 };
 
 void init_ftable();
