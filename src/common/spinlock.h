@@ -34,4 +34,5 @@ void _raii_release_spinlock(SpinLock **lock);
 #define raii_acquire_spinlock(lock, id)                                        \
     SpinLock *_raii_lock_##id                                                  \
         __attribute__((__cleanup__(_raii_release_spinlock))) =                 \
-            _raii_acquire_spinlock(lock)
+            _raii_acquire_spinlock(lock);                                      \
+    UNUSE(_raii_lock_##id)

@@ -22,7 +22,6 @@
 #include <kernel/sched.h>
 #include <sys/syscall.h>
 
-
 struct iovec {
     void *iov_base; /* Starting address. */
     usize iov_len;  /* Number of bytes to transfer. */
@@ -360,5 +359,10 @@ define_syscall(chdir, const char *path) {
 }
 
 define_syscall(pipe2, char int *fd, int flags) {
-    // TODO
+    File *f0, *f1;
+    if (pipeAlloc(&f0, &f1)) {
+        return -1;
+    }
+    /* TODO: file2fd and place in fd */
+    return 0;
 }
