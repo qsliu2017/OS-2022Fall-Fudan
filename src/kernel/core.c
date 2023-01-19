@@ -37,8 +37,6 @@ NO_RETURN void kernel_entry() {
 
     do_rest_init();
 
-    DEBUG();
-
     extern char icode[], eicode[];
     UNUSE(eicode);
     auto initp = create_proc();
@@ -50,7 +48,6 @@ NO_RETURN void kernel_entry() {
     initp->ucontext->sp = 0;
     start_proc(initp, trap_return, 0);
 
-    DEBUG();
     for (;;)
         yield();
 }

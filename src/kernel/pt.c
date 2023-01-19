@@ -12,6 +12,10 @@ static inline u64 va_part(int n, u64 va) {
     return (va >> (39 - n * 9)) & ((1 << 9) - 1);
 }
 
+static inline u64 to_va_part(int n, u64 part) {
+    return (part & ((1 << 9) - 1)) << (39 - n * 9);
+}
+
 // Return a pointer to the PTE (Page Table Entry) for virtual address 'va'
 // If the entry not exists (NEEDN'T BE VALID), allocate it if alloc=true, or
 // return NULL if false. THIS ROUTINUE GETS THE PTE, NOT THE PAGE DESCRIBED BY
@@ -51,28 +55,37 @@ PTEntriesPtr _init_pt() {
     return p;
 }
 
-typedef void pte_func(u64 pte, void *arg);
+typedef void pte_func(PTEntriesPtr pte, u64 va, bool entry, void *arg);
 
-static void walk_pgt(u64 *pgt, int level, pte_func *f, void *arg) {
-    // printk("walk_pgt(pt=0x%p, level=%d, f=0x%p)\n", pgt, level, f);
-    if (level < 3) {
+static void _walk_pgt(PTEntriesPtr pte, u64 va, int level, pte_func *f,
+                      void *arg) {
+
+    if (level <= 3) {
+        pte = (PTEntriesPtr)KSPACE(PTE_ADDRESS((u64)pte));
         for (int i = 0; i < N_PTE_PER_TABLE; i++) {
-            if (pgt[i] == NULL)
+            if (pte[i] == NULL)
                 continue;
-            walk_pgt((u64 *)P2K(PTE_ADDRESS(pgt[i])), level + 1, f, arg);
+            _walk_pgt((PTEntriesPtr)pte[i], va | to_va_part(level, i),
+                      level + 1, f, arg);
         }
     }
-    f((u64)pgt, arg);
+    f(pte, va, level > 3, arg);
 }
 
-static void free_pgt(u64 pte, void *arg) {
+static inline void walk_pgt(u64 *pgt, pte_func *f, void *arg) {
+    _walk_pgt(pgt, 0, 0, f, arg);
+}
+
+static void free_pgt(PTEntriesPtr pte, u64 va, bool entry, void *arg) {
+    UNUSE(va);
     UNUSE(arg);
-    kfree_page((void *)P2K(PTE_ADDRESS(pte)));
+    if (!entry)
+        kfree_page((void *)KSPACE((PTE_ADDRESS((u64)pte))));
 }
 
 void free_pgdir(struct pgdir *pgdir) { _free_pgdir(pgdir->pt); }
 
-void _free_pgdir(PTEntriesPtr pt) { walk_pgt(pt, 0, free_pgt, 0); }
+void _free_pgdir(PTEntriesPtr pt) { walk_pgt(pt, free_pgt, 0); }
 
 void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags) {
     _vmmap(pd->pt, va, ka, flags);
@@ -137,14 +150,24 @@ int uvmalloc(struct pgdir *pd, u64 base, u64 oldsz, u64 newsz) {
     return newsz;
 }
 
-static void copy_pgt(u64 pte, void *arg) {
-    struct pgdir *dst = (struct pgdir *)arg;
-    auto p = kalloc_page();
-    u64 va = P2K(PTE_ADDRESS(pte));
-    memcpy(p, (void *)va, PAGE_SIZE);
-    *get_pte(dst, va, true) = K2P(p) | PTE_FLAGS(pte);
+static void copy_pgt(PTEntriesPtr pte, u64 va, bool entry, void *arg) {
+    if (entry) {
+        struct pgdir *dst = arg;
+        auto p = kalloc_page();
+        memcpy(p, (void *)KSPACE(PTE_ADDRESS((u64)pte)), PAGE_SIZE);
+        *get_pte(dst, va, true) = K2P(p) | PTE_FLAGS((u64)pte);
+    }
 }
 
 void uvmcopy(struct pgdir *dst) {
-    walk_pgt(thisproc()->pgdir.pt, 0, copy_pgt, dst);
+    walk_pgt(thisproc()->pgdir.pt, copy_pgt, dst);
 }
+
+void __debug_pgt(PTEntriesPtr pte, u64 va, bool entry, void *arg) {
+    UNUSE(arg);
+    if (entry) {
+        printk("%s:%d pte=0x%p, va=0x%llx\n", __FILE__, __LINE__, pte, va);
+    }
+}
+
+void _debug_pgt(struct pgdir *pd) { walk_pgt(pd->pt, __debug_pgt, 0); }

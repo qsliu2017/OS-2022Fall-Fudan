@@ -219,7 +219,7 @@ int fork() {
     *(child->ucontext) = *(parent->ucontext);
     child->ucontext->x[0] = 0;
 
-    child->parent = parent;
+    set_parent_to_this(child);
     child->container = parent->container;
     for (int i = 0; i < NR_OPEN_DEFAULT; i++) {
         File *f;
