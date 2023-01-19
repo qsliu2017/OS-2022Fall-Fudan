@@ -232,11 +232,11 @@ static usize inode_map(OpContext *ctx, Inode *inode, usize offset,
 }
 
 // see `inode.h`.
-static usize inode_read(Inode* inode, u8* dest, usize offset, usize count) {
-    InodeEntry* entry = &inode->entry;
+static usize inode_read(Inode *inode, u8 *dest, usize offset, usize count) {
+    InodeEntry *entry = &inode->entry;
     if (inode->entry.type == INODE_DEVICE) {
-        assert(inode->entry.major == 1);
-        return console_read(inode, dest, count);
+        ASSERT(inode->entry.major == 1);
+        return console_read(inode, (char *)dest, count);
     }
     if (count + offset > entry->num_bytes)
         count = entry->num_bytes - offset;
@@ -265,8 +265,8 @@ static usize inode_write(OpContext *ctx, Inode *inode, u8 *src, usize offset,
     InodeEntry *entry = &inode->entry;
     usize end = offset + count;
     if (inode->entry.type == INODE_DEVICE) {
-        assert(inode->entry.major == 1);
-        return console_write(inode, src, count);
+        ASSERT(inode->entry.major == 1);
+        return console_write(inode, (char *)src, count);
     }
     ASSERT(offset <= entry->num_bytes);
     ASSERT(end <= INODE_MAX_BYTES);
@@ -395,12 +395,21 @@ static const char *skipelem(const char *path, char *name) {
  * path element into name, which must have room for DIRSIZ bytes.
  * Must be called inside a transaction since it calls iput().
  */
-static Inode* namex(const char* path,
-                    int nameiparent,
-                    char* name,
-                    OpContext* ctx) {
-    /* TODO: Lab10 Shell */
-    return 0;
+static Inode *namex(const char *path, int nameiparent, char *name,
+                    OpContext *ctx) {
+    UNUSE(ctx);
+    Inode *current = inodes.root;
+    while ((path = skipelem(path, name)) != 0) {
+        if (nameiparent != 0 && strncmp(path, "", 2) == 0) {
+            break;
+        }
+        usize inode_no = inodes.lookup(current, name, NULL);
+        if (inode_no == 0) {
+            return 0;
+        }
+        current = inodes.get(inode_no);
+    }
+    return current;
 }
 
 Inode *namei(const char *path, OpContext *ctx) {
@@ -422,16 +431,16 @@ void stati(Inode *ip, struct stat *st) {
     st->st_nlink = ip->entry.num_links;
     st->st_size = ip->entry.num_bytes;
     switch (ip->entry.type) {
-        case INODE_REGULAR:
-            st->st_mode = S_IFREG;
-            break;
-        case INODE_DIRECTORY:
-            st->st_mode = S_IFDIR;
-            break;
-        case INODE_DEVICE:
-            st->st_mode = 0;
-            break;
-        default:
-            PANIC();
+    case INODE_REGULAR:
+        st->st_mode = S_IFREG;
+        break;
+    case INODE_DIRECTORY:
+        st->st_mode = S_IFDIR;
+        break;
+    case INODE_DEVICE:
+        st->st_mode = 0;
+        break;
+    default:
+        PANIC();
     }
 }

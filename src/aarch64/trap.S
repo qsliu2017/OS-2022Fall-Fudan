@@ -27,11 +27,21 @@ trap_entry:
   pushp(x1, x0)
   pushp(x3, x2)
 
+  mrs x12, tpidr_el0
+  str x12, [sp, #-0x10]!
+
+  str q0, [sp, #-0x20]!
+
   mov x0, sp
   bl trap_global_handler
 
 .global trap_return
 trap_return:
+  ldr q0, [sp], #0x20
+
+  ldr x12, [sp], #0x10
+  msr tpidr_el0, x12
+
   popp(x3, x2)
   popp(x1, x0)
 

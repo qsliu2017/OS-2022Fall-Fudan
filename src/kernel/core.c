@@ -7,6 +7,8 @@
 
 bool panic_flag;
 
+NO_RETURN extern void icode();
+
 NO_RETURN void idle_entry() {
     set_cpu_on();
     while (1) {
@@ -29,7 +31,7 @@ NO_RETURN void kernel_entry() {
 
     do_rest_init();
 
-    // TODO: map init.S to user space and trap_return to run icode
+    icode();
 }
 
 NO_INLINE NO_RETURN void _panic(const char *file, int line) {

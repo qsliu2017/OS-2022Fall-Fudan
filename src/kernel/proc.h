@@ -24,6 +24,9 @@ typedef struct UserContext {
      * - sets pc to the address of the exception handler
      */
 
+    u64 q0[2];
+    u64 tpidr_el0;
+
     u64 spsr; /* saved program state register */
     u64 elr;
     u64 sp;

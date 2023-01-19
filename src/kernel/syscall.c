@@ -26,12 +26,18 @@ void syscall_entry(UserContext *context) {
 // user process
 bool user_readable(const void *start, usize size) {
     // TODO
+    UNUSE(start);
+    UNUSE(size);
+    return false;
 }
 
 // check if the virtual address [start,start+size) is READABLE & WRITEABLE by
 // the current user process
 bool user_writeable(const void *start, usize size) {
     // TODO
+    UNUSE(start);
+    UNUSE(size);
+    return false;
 }
 
 // get the length of a string including tailing '\0' in the memory space of

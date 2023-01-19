@@ -2,7 +2,6 @@
 #include "aarch64/intrinsic.h"
 #include "common/rc.h"
 #include "common/spinlock.h"
-#include "test.h"
 #include <kernel/printk.h>
 struct mytype {
     struct rb_node_ node;

@@ -11,6 +11,9 @@
 #include <kernel/pt.h>
 #include <kernel/sched.h>
 
+#define _for_in_section(st, va)                                                \
+    for (u64 va = st->begin; va < st->end; va += PAGE_SIZE)
+
 // size is the number of page
 u64 sbrk(i64 size) {
     extern struct pgdir *_curpgdir;
@@ -49,14 +52,18 @@ void swapout(struct pgdir *pd, struct section *st) {
     st->flags |= ST_SWAP;
 
     for (u64 addr = st->begin; addr < st->end; addr += PAGE_SIZE) {
-        u32 bno = write_page_to_disk((void *)addr);
-        ASSERT(bno);
         auto pte = get_pte(pd, addr, false);
         ASSERT(pte);
+        u64 new_pte = *pte & 0xFFF & ~PTE_VALID;
+        if (st->fp) {
+
+        } else {
+            u32 bno = write_page_to_disk((void *)addr);
+            ASSERT(bno);
+            new_pte |= (u64)bno << 12;
+        }
         kderef_page((void *)P2K(PAGE_BASE((u64)*pte)));
-        *pte &= 0xFFF;
-        *pte |= (u64)bno << 12;
-        *pte &= ~PTE_VALID;
+        *pte = new_pte;
     }
 }
 // Free 8 continuous disk blocks
@@ -66,10 +73,14 @@ void swapin(struct pgdir *pd, struct section *st) {
     for (u64 va = st->begin; va < st->end; va += PAGE_SIZE) {
         auto pte = get_pte(pd, va, false);
         ASSERT(pte);
-        u32 bno = P2N(*pte);
         auto p = kalloc_page();
         kref_page(p);
-        read_page_from_disk(p, bno);
+        if (st->fp) {
+            fileread(st->fp, (char *)p, MIN(st->end - va, (u64)PAGE_SIZE));
+        } else {
+            u32 bno = P2N(*pte);
+            read_page_from_disk(p, bno);
+        }
         *pte = K2P(p) | (*pte & 0xFFF) | PTE_VALID;
     }
 }
@@ -109,6 +120,8 @@ int pgfault(u64 iss) {
         *get_pte(pd, addr, true) = K2P(p) | PTE_USER_DATA;
     }
     if (*pte & PTE_RO) {
+        if (st->fp)
+            return -1;
         void *new_p = kalloc_page();
         kref_page(new_p);
         void *old_p = (void *)P2K(PAGE_BASE(*pte));
@@ -118,4 +131,21 @@ int pgfault(u64 iss) {
     }
 
     return 0;
+}
+
+struct section *mmap(struct pgdir *pd, u64 va, File *fp, u64 offset, u64 length,
+                     u64 flags) {
+    ASSERT(va % PAGE_SIZE == 0);
+    struct section *st = kalloc(sizeof(struct section));
+    st->flags = flags;
+    init_sleeplock(&st->sleeplock);
+    st->begin = va;
+    st->end = va + length;
+    insert_into_list(&pd->lock, &pd->section_head, &st->stnode);
+    st->fp = fp;
+    filedup(fp);
+    st->offset = offset;
+    st->length = length;
+
+    return st;
 }

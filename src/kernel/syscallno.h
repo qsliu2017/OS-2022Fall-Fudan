@@ -8,6 +8,7 @@
 #define SYS_clone 220
 #define SYS_myexit 457
 #define SYS_myyield 459
+#define SYS_yield 124
 
 #define SYS_exit 93
 #define SYS_execve 221

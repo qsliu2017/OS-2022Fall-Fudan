@@ -31,6 +31,8 @@ struct iovec {
 // return null if the fd is invalid
 static struct file *fd2file(int fd) {
     // TODO
+    UNUSE(fd);
+    return 0;
 }
 
 /*
@@ -39,6 +41,7 @@ static struct file *fd2file(int fd) {
  */
 int fdalloc(struct file *f) {
     /* TODO: Lab10 Shell */
+    UNUSE(f);
     return -1;
 }
 
@@ -54,10 +57,20 @@ define_syscall(ioctl, int fd, u64 request) {
 define_syscall(mmap, void *addr, int length, int prot, int flags, int fd,
                int offset) {
     // TODO
+    UNUSE(addr);
+    UNUSE(length);
+    UNUSE(prot);
+    UNUSE(flags);
+    UNUSE(fd);
+    UNUSE(offset);
+    return -1;
 }
 
-define_syscall(munmap, void *addr, size_t length) {
+define_syscall(munmap, void *addr, usize length) {
     // TODO
+    UNUSE(addr);
+    UNUSE(length);
+    return -1;
 }
 
 /*
@@ -67,7 +80,7 @@ define_syscall(dup, int fd) {
     struct file *f = fd2file(fd);
     if (!f)
         return -1;
-    int fd = fdalloc(f);
+    fd = fdalloc(f);
     if (fd < 0)
         return -1;
     filedup(f);
@@ -114,6 +127,7 @@ define_syscall(writev, int fd, struct iovec *iov, int iovcnt) {
  */
 define_syscall(close, int fd) {
     /* TODO: Lab10 Shell */
+    UNUSE(fd);
     return 0;
 }
 
@@ -154,20 +168,6 @@ define_syscall(newfstatat, int dirfd, const char *path, struct stat *st,
     bcache.end_op(&ctx);
 
     return 0;
-}
-
-// Is the directory dp empty except for "." and ".." ?
-static int isdirempty(Inode *dp) {
-    usize off;
-    DirEntry de;
-
-    for (off = 2 * sizeof(de); off < dp->entry.num_bytes; off += sizeof(de)) {
-        if (inodes.read(dp, (u8 *)&de, off, sizeof(de)) != sizeof(de))
-            PANIC();
-        if (de.inode_no != 0)
-            return 0;
-    }
-    return 1;
 }
 
 // Is the directory dp empty except for "." and ".." ?
@@ -255,6 +255,11 @@ bad:
 Inode *create(const char *path, short type, short major, short minor,
               OpContext *ctx) {
     /* TODO: Lab10 Shell */
+    UNUSE(path);
+    UNUSE(type);
+    UNUSE(major);
+    UNUSE(minor);
+    UNUSE(ctx);
     return 0;
 }
 
@@ -356,13 +361,18 @@ define_syscall(chdir, const char *path) {
     // TODO
     // change the cwd (current working dictionary) of current process to 'path'
     // you may need to do some validations
+
+    UNUSE(path);
+    return -1;
 }
 
-define_syscall(pipe2, char int *fd, int flags) {
+define_syscall(pipe2, int *fd, int flags) {
     File *f0, *f1;
     if (pipeAlloc(&f0, &f1)) {
         return -1;
     }
     /* TODO: file2fd and place in fd */
+    UNUSE(fd);
+    UNUSE(flags);
     return 0;
 }

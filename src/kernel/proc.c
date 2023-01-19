@@ -1,3 +1,4 @@
+#include <common/defines.h>
 #include <common/list.h>
 #include <common/rbtree.h>
 #include <common/string.h>
@@ -203,4 +204,21 @@ void dump_proc(struct proc const *p) {
  * Sets up stack to return as if from system call.
  */
 void trap_return();
-int fork() { /* TODO: Your code here. */ }
+int fork() {
+    auto parent = thisproc();
+    auto child = create_proc();
+    *(child->ucontext) = *(parent->ucontext);
+    *(child->kcontext) = *(parent->kcontext);
+
+    child->parent = parent;
+    auto __r = _rb_insert(&child->node, &parent->child_root, __proc_cmp);
+    ASSERT(!__r);
+
+    init_schinfo(&child->schinfo, false);
+
+    child->ucontext->x0 = 0;
+    child->container = parent->container;
+    child->localpid = alloc_localpid(parent->container);
+    activate_proc(child);
+    return child->localpid;
+}

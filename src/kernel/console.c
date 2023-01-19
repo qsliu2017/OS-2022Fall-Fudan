@@ -1,11 +1,10 @@
-#include "common/defines.h"
-#include "common/spinlock.h"
-#include <aarch64/intrinsic.h>
+#include <stdlib.h>
+
+#include <common/spinlock.h>
 #include <driver/uart.h>
 #include <kernel/console.h>
 #include <kernel/init.h>
 #include <kernel/sched.h>
-#include <stdlib.h>
 #define INPUT_BUF 128
 struct {
     char buf[INPUT_BUF];

@@ -97,4 +97,9 @@ void dump_pt(PTEntriesPtr pt) {
  */
 int copyout(struct pgdir *pd, void *va, void *p, usize len) {
     // TODO
+    UNUSE(pd);
+    UNUSE(va);
+    UNUSE(p);
+    UNUSE(len);
+    return 0;
 }
