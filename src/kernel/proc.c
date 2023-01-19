@@ -3,6 +3,7 @@
 #include <common/rbtree.h>
 #include <common/string.h>
 #include <fs/file.h>
+#include <fs/inode.h>
 #include <kernel/container.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
@@ -204,26 +205,28 @@ void dump_proc(struct proc const *p) {
            p->ucontext, p->kcontext);
 }
 
+void trap_return();
+
 /*
  * Create a new process copying p as the parent.
  * Sets up stack to return as if from system call.
  */
-void trap_return();
 int fork() {
     auto parent = thisproc();
     auto child = create_proc();
+
+    uvmcopy(&child->pgdir);
     *(child->ucontext) = *(parent->ucontext);
-    *(child->kcontext) = *(parent->kcontext);
+    child->ucontext->x[0] = 0;
 
     child->parent = parent;
-    auto __r = _rb_insert(&child->node, &parent->child_root, __proc_cmp);
-    ASSERT(!__r);
-
-    init_schinfo(&child->schinfo, false);
-
-    child->ucontext->x[0] = 0;
     child->container = parent->container;
-    child->localpid = alloc_localpid(parent->container);
-    activate_proc(child);
-    return child->localpid;
+    for (int i = 0; i < NR_OPEN_DEFAULT; i++) {
+        File *f;
+        if ((f = parent->oftable.file[i]))
+            child->oftable.file[i] = filedup(f);
+    }
+    child->cwd = inodes.share(parent->cwd);
+
+    return start_proc(child, trap_return, 0);
 }

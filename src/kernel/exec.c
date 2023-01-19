@@ -14,7 +14,6 @@
 #include <kernel/sched.h>
 #include <kernel/syscall.h>
 
-static u64 auxv[][2] = {{AT_PAGESZ, PAGE_SIZE}};
 extern int fdalloc(struct file *f);
 
 int execve(const char *path, char *const argv[], char *const envp[]) {
@@ -48,37 +47,34 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
         }
     }
 
-    DEBUG();
-    usize newsp = round_up(sp - sizeof(auxv) - (argc + envc + 4) * 8, 16);
-    copyout(&this->pgdir, (u8 *)newsp, get_zero_page(), sp - newsp);
+    usize newenvp = round_down(sp - sizeof(void *) * (envc + 1), 16);
+    usize newargv = round_down(newenvp - sizeof(void *) * (argc + 1), 16);
+
+    copyout(&this->pgdir, (u8 *)newargv, get_zero_page(), sp - newargv);
 
     attach_pgdir(&this->pgdir);
     _free_pgdir(oldpt);
 
-    u64 *newargv = (void *)newsp + 8,
-        *newenvp = (void *)newargv + 8 * (argc + 1),
-        *newauxv = (void *)newenvp + 8 * (envc + 1);
-
-    memcpy(newauxv, auxv, sizeof(auxv));
-
     for (int i = envc - 1; i >= 0; i--) {
-        newenvp[i] = sp;
+        ((u64 *)newenvp)[i] = sp;
         while (*(u8 *)(sp++))
             ;
     }
     for (int i = argc - 1; i >= 0; i--) {
-        newargv[i] = sp;
+        ((u64 *)newargv)[i] = sp;
         while (*(u8 *)(sp++))
             ;
     }
 
-    *(u64 *)newsp = argc;
-    sp = newsp;
+    sp = newargv;
 
     Elf64_Ehdr ehdr;
     if (inodes.read(ip, (u8 *)&ehdr, 0, sizeof(ehdr)) != sizeof(ehdr))
         goto on_error;
 
+    this->ucontext->x[0] = argc;
+    this->ucontext->x[1] = (u64)newargv;
+    this->ucontext->x[2] = (u64)newenvp;
     this->ucontext->elr = ehdr.e_entry;
     this->ucontext->sp = sp;
 

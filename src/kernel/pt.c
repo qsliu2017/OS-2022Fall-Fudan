@@ -1,10 +1,12 @@
 #include <aarch64/intrinsic.h>
+#include <aarch64/mmu.h>
 #include <common/defines.h>
 #include <common/string.h>
 #include <kernel/mem.h>
 #include <kernel/paging.h>
 #include <kernel/printk.h>
 #include <kernel/pt.h>
+#include <kernel/sched.h>
 
 static inline u64 va_part(int n, u64 va) {
     return (va >> (39 - n * 9)) & ((1 << 9) - 1);
@@ -49,25 +51,28 @@ PTEntriesPtr _init_pt() {
     return p;
 }
 
-typedef void pte_func(u64 pte);
+typedef void pte_func(u64 pte, void *arg);
 
-static void walk_pgt(u64 *pgt, int level, pte_func *f) {
+static void walk_pgt(u64 *pgt, int level, pte_func *f, void *arg) {
     // printk("walk_pgt(pt=0x%p, level=%d, f=0x%p)\n", pgt, level, f);
     if (level < 3) {
         for (int i = 0; i < N_PTE_PER_TABLE; i++) {
             if (pgt[i] == NULL)
                 continue;
-            walk_pgt((u64 *)P2K(PTE_ADDRESS(pgt[i])), level + 1, f);
+            walk_pgt((u64 *)P2K(PTE_ADDRESS(pgt[i])), level + 1, f, arg);
         }
     }
-    f((u64)pgt);
+    f((u64)pgt, arg);
 }
 
-static void free_pgt(u64 pte) { kfree_page((void *)P2K(PTE_ADDRESS(pte))); }
+static void free_pgt(u64 pte, void *arg) {
+    UNUSE(arg);
+    kfree_page((void *)P2K(PTE_ADDRESS(pte)));
+}
 
 void free_pgdir(struct pgdir *pgdir) { _free_pgdir(pgdir->pt); }
 
-void _free_pgdir(PTEntriesPtr pt) { walk_pgt(pt, 0, free_pgt); }
+void _free_pgdir(PTEntriesPtr pt) { walk_pgt(pt, 0, free_pgt, 0); }
 
 void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags) {
     _vmmap(pd->pt, va, ka, flags);
@@ -130,4 +135,16 @@ int uvmalloc(struct pgdir *pd, u64 base, u64 oldsz, u64 newsz) {
         vmmap(pd, base + off, p, PTE_USER_DATA);
     }
     return newsz;
+}
+
+static void copy_pgt(u64 pte, void *arg) {
+    struct pgdir *dst = (struct pgdir *)arg;
+    auto p = kalloc_page();
+    u64 va = P2K(PTE_ADDRESS(pte));
+    memcpy(p, (void *)va, PAGE_SIZE);
+    *get_pte(dst, va, true) = K2P(p) | PTE_FLAGS(pte);
+}
+
+void uvmcopy(struct pgdir *dst) {
+    walk_pgt(thisproc()->pgdir.pt, 0, copy_pgt, dst);
 }
