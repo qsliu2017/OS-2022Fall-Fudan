@@ -2,6 +2,7 @@
 #include <common/spinlock.h>
 #include <kernel/init.h>
 #include <kernel/printk.h>
+#include <kernel/syscall.h>
 
 static SpinLock printk_lock;
 
@@ -24,4 +25,9 @@ void printk(const char *fmt, ...) {
     va_start(arg, fmt);
     _vprintf(fmt, arg);
     va_end(arg);
+}
+
+define_syscall(debug, char *file, int line, char *fmt) {
+    printk("sys_debug(%s:%d): %s\n", file, line, fmt);
+    return 0;
 }
