@@ -1,4 +1,5 @@
 #include <aarch64/intrinsic.h>
+#include <common/defines.h>
 #include <common/string.h>
 #include <kernel/mem.h>
 #include <kernel/paging.h>
@@ -14,32 +15,38 @@ static inline u64 va_part(int n, u64 va) {
 // return NULL if false. THIS ROUTINUE GETS THE PTE, NOT THE PAGE DESCRIBED BY
 // PTE.
 PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc) {
-    u64 *pgt = pgdir->pt;
+    return _get_pte(pgdir->pt, va, alloc);
+}
+PTEntriesPtr _get_pte(PTEntriesPtr pt, u64 va, bool alloc) {
     for (int level = 0; level < 3; level++) {
         int i = va_part(level, va);
-        if (pgt[i] == NULL) {
+        if (pt[i] == NULL) {
             if (!alloc)
                 return NULL;
             auto p = kalloc_page();
             ASSERT(p != NULL);
             memset(p, 0, sizeof(PTEntries));
-            pgt[i] = K2P((u64)p | PTE_TABLE);
+            pt[i] = K2P((u64)p | PTE_TABLE);
         }
-        pgt = (u64 *)P2K(PTE_ADDRESS(pgt[i]));
+        pt = (u64 *)P2K(PTE_ADDRESS(pt[i]));
     }
 
-    pgt = (u64 *)KSPACE((u64)&pgt[va_part(3, va)]);
+    pt = (u64 *)KSPACE((u64)&pt[va_part(3, va)]);
 
-    // printk("get_pte(va=0x%llx, alloc=%d)=0x%p\n", va, alloc, pgt);
-    return pgt;
+    // printk("get_pte(va=0x%llx, alloc=%d)=0x%p\n", va, alloc, pt);
+    return pt;
 }
 
 void init_pgdir(struct pgdir *pgdir) {
-    auto p = kalloc_page();
-    memset(p, 0, sizeof(PTEntries));
-    pgdir->pt = p;
+    pgdir->pt = _init_pt();
     init_spinlock(&pgdir->lock);
     init_sections(&pgdir->section_head);
+}
+
+PTEntriesPtr _init_pt() {
+    auto p = kalloc_page();
+    memset(p, 0, sizeof(PTEntries));
+    return p;
 }
 
 typedef void pte_func(u64 pte);
@@ -58,29 +65,32 @@ static void walk_pgt(u64 *pgt, int level, pte_func *f) {
 
 static void free_pgt(u64 pte) { kfree_page((void *)P2K(PTE_ADDRESS(pte))); }
 
-void free_pgdir(struct pgdir *pgdir) {
-    // TODO
-    // Free pages used by the page table. If pgdir->pt=NULL, do nothing.
-    // DONT FREE PAGES DESCRIBED BY THE PAGE TABLE
-    walk_pgt(pgdir->pt, 0, free_pgt);
-}
+void free_pgdir(struct pgdir *pgdir) { _free_pgdir(pgdir->pt); }
+
+void _free_pgdir(PTEntriesPtr pt) { walk_pgt(pt, 0, free_pgt); }
 
 void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags) {
-    *get_pte(pd, va, true) = K2P(ka) | flags;
+    _vmmap(pd->pt, va, ka, flags);
+}
+
+void _vmmap(PTEntriesPtr pt, u64 va, void *ka, u64 flags) {
+    *_get_pte(pt, va, true) = K2P(ka) | flags;
     kref_page(ka);
     arch_tlbi_vmalle1is();
 }
 
 struct pgdir *_curpgdir = NULL;
-
 void attach_pgdir(struct pgdir *pgdir) {
+    _curpgdir = pgdir;
+    _attach_pgdir(pgdir->pt);
+}
+
+void _attach_pgdir(PTEntriesPtr pt) {
     extern PTEntries invalid_pt;
-    if (pgdir->pt) {
-        arch_set_ttbr0(K2P(pgdir->pt));
-        _curpgdir = pgdir;
+    if (pt) {
+        arch_set_ttbr0(K2P(pt));
     } else {
         arch_set_ttbr0(K2P(&invalid_pt));
-        _curpgdir = NULL;
     }
 }
 
@@ -96,10 +106,28 @@ void dump_pt(PTEntriesPtr pt) {
  * Useful when pgdir is not the current page table.
  */
 int copyout(struct pgdir *pd, void *va, void *p, usize len) {
-    // TODO
-    UNUSE(pd);
-    UNUSE(va);
-    UNUSE(p);
-    UNUSE(len);
-    return 0;
+    u64 n = 0;
+    for (u64 a = round_down((u64)va, PAGE_SIZE); a < (u64)va + len;
+         a += PAGE_SIZE) {
+        void *page;
+        if (!(page = get_pte(pd, a, false))) {
+            page = kalloc_page();
+            kref_page(page);
+            *get_pte(pd, a, true) = K2P(page) | PTE_USER_DATA;
+        }
+        u64 _n = a + PAGE_SIZE - ((u64)va + n);
+        memcpy(page + ((u64)va + n) % PAGE_SIZE, p + n, _n);
+        n += _n;
+    }
+    return n;
+}
+
+int uvmalloc(struct pgdir *pd, u64 base, u64 oldsz, u64 newsz) {
+    ASSERT(oldsz < newsz);
+    for (u64 off = round_up(oldsz, PAGE_SIZE); off < newsz; off += PAGE_SIZE) {
+        auto p = kalloc_page();
+        kref_page(p);
+        vmmap(pd, base + off, p, PTE_USER_DATA);
+    }
+    return newsz;
 }

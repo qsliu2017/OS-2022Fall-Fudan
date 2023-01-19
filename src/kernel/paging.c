@@ -115,9 +115,10 @@ int pgfault(u64 iss) {
         swapin(pd, st);
     }
     if (!pte || !*pte) {
+        pte = get_pte(pd, addr, true);
         auto p = kalloc_page();
         kref_page(p);
-        *get_pte(pd, addr, true) = K2P(p) | PTE_USER_DATA;
+        *pte = K2P(p) | PTE_USER_DATA;
     }
     if (*pte & PTE_RO) {
         if (st->fp)

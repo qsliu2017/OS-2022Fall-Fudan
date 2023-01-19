@@ -20,7 +20,7 @@ void trap_global_handler(UserContext *context) {
     switch (ec) {
     case ESR_EC_UNKNOWN: {
         if (ir) {
-            printk("Broken pc?\n");
+            printk("Broken pc? esr=0x%llx\n", esr);
             PANIC();
         } else
             interrupt_global_handler();

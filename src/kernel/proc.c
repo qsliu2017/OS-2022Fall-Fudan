@@ -15,6 +15,9 @@ static SpinLock proc_lock;
 
 struct proc procs[NPROC];
 
+#define KSTACK_SIZE PAGE_SIZE * 4
+char kstack[NPROC][KSTACK_SIZE];
+
 /* UNUSED procs rbtree root */
 static struct rb_root_ free_root;
 
@@ -45,8 +48,8 @@ struct proc *create_proc() {
     /* init private fields */
 
     init_pgdir(&p->pgdir);
-    p->kstack = kalloc_page();
-    p->ucontext = p->kstack + PAGE_SIZE - sizeof(UserContext);
+    p->kstack = kstack[get_pid(p)];
+    p->ucontext = p->kstack + KSTACK_SIZE - sizeof(UserContext);
     p->kcontext = (void *)p->ucontext - sizeof(KernelContext);
 
     /* init shared fields */
@@ -159,8 +162,6 @@ int wait(int *exitcode, int *pid) {
     _rb_erase(&child->node, &this->exit_root);
     *exitcode = child->exitcode;
     free_pgdir(&child->pgdir);
-    ASSERT(child->kstack);
-    kfree_page(child->kstack);
     *pid = get_pid(child);
     free_localpid(child->container, child->localpid);
 

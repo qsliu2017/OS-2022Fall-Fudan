@@ -14,31 +14,73 @@
 #include <kernel/sched.h>
 #include <kernel/syscall.h>
 
-// static u64 auxv[][2] = {{AT_PAGESZ, PAGE_SIZE}};
+static u64 auxv[][2] = {{AT_PAGESZ, PAGE_SIZE}};
 extern int fdalloc(struct file *f);
 
 int execve(const char *path, char *const argv[], char *const envp[]) {
     printk("%s:%d execve(%s)\n", __FILE__, __LINE__, path);
-    UNUSE(envp);
-    struct proc *this = thisproc();
-    int argc;
-    for (argc = 0; argv[argc]; argc++)
-        ;
+
     OpContext ctx;
     bcache.begin_op(&ctx);
     Inode *ip = namei(path, &ctx);
-    bcache.end_op(&ctx);
-    Elf64_Ehdr ehdr;
-    File *fp = filealloc();
-    fp->type = FD_INODE;
-    fp->ref = 0;
-    fp->readable = 1;
-    fp->writable = 0;
-    fp->ip = ip;
-    fp->off = 0;
+    inodes.lock(ip);
 
-    if (fileread(fp, (char *)&ehdr, sizeof(ehdr)) != sizeof(ehdr))
+    struct proc *this = thisproc();
+
+    PTEntriesPtr oldpt = this->pgdir.pt;
+    this->pgdir.pt = _init_pt();
+
+    usize sp = 0x0001000000000000; /* Top address of user space. */
+    int argc = 0;
+    if (argv) {
+        for (; argv[argc]; argc++) {
+            usize len = strlen(argv[argc]);
+            sp -= len + 1;
+            copyout(&this->pgdir, (u8 *)sp, argv[argc], len + 1);
+        }
+    }
+    int envc = 0;
+    if (envp) {
+        for (; envp[envc]; envc++) {
+            usize len = strlen(envp[envc]);
+            sp -= len + 1;
+            copyout(&this->pgdir, (u8 *)sp, envp[envc], len + 1);
+        }
+    }
+
+    DEBUG();
+    usize newsp = round_up(sp - sizeof(auxv) - (argc + envc + 4) * 8, 16);
+    copyout(&this->pgdir, (u8 *)newsp, get_zero_page(), sp - newsp);
+
+    attach_pgdir(&this->pgdir);
+    _free_pgdir(oldpt);
+
+    u64 *newargv = (void *)newsp + 8,
+        *newenvp = (void *)newargv + 8 * (argc + 1),
+        *newauxv = (void *)newenvp + 8 * (envc + 1);
+
+    memcpy(newauxv, auxv, sizeof(auxv));
+
+    for (int i = envc - 1; i >= 0; i--) {
+        newenvp[i] = sp;
+        while (*(u8 *)(sp++))
+            ;
+    }
+    for (int i = argc - 1; i >= 0; i--) {
+        newargv[i] = sp;
+        while (*(u8 *)(sp++))
+            ;
+    }
+
+    *(u64 *)newsp = argc;
+    sp = newsp;
+
+    Elf64_Ehdr ehdr;
+    if (inodes.read(ip, (u8 *)&ehdr, 0, sizeof(ehdr)) != sizeof(ehdr))
         goto on_error;
+
+    this->ucontext->elr = ehdr.e_entry;
+    this->ucontext->sp = sp;
 
     if ((ehdr.e_ident[EI_MAG0] != ELFMAG0) ||
         (ehdr.e_ident[EI_MAG1] != ELFMAG1) ||
@@ -46,13 +88,11 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
         (ehdr.e_ident[EI_MAG3] != ELFMAG3))
         goto on_error;
 
-    struct pgdir *pd = &this->pgdir;
-
     Elf64_Phdr phdr;
-
+    u64 sz = 0, base = 0;
     for (usize i = 0, off = ehdr.e_phoff; i < ehdr.e_phnum;
          i++, off += sizeof(Elf64_Phdr)) {
-        if (fileread(fp, (char *)&phdr, sizeof(phdr)) != sizeof(phdr))
+        if (inodes.read(ip, (u8 *)&phdr, off, sizeof(phdr)) != sizeof(phdr))
             goto on_error;
         if (phdr.p_type != PT_LOAD)
             continue;
@@ -65,26 +105,41 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
         if (phdr.p_vaddr + phdr.p_memsz < phdr.p_vaddr)
             goto on_error;
 
-        if (phdr.p_vaddr % PAGE_SIZE)
-            goto on_error;
-
-        u64 flags;
-        switch (phdr.p_flags) {
-        case PT_LOAD:
-            flags = ST_SWAP | ST_TEXT;
-            break;
-        case PT_DYNAMIC:
-            flags = ST_SWAP | ST_DATA;
-            break;
-        default:
-            goto on_error;
+        for (usize va = phdr.p_vaddr; va < phdr.p_vaddr + phdr.p_memsz;
+             va += PAGE_SIZE) {
+            auto p = kalloc_page();
+            *get_pte(&this->pgdir, va, true) = K2P(p) | PTE_USER_DATA;
         }
 
-        mmap(pd, phdr.p_vaddr, fp, phdr.p_offset, phdr.p_filesz, flags);
+        if (!sz) {
+            sz = base = phdr.p_vaddr;
+            if (base % PAGE_SIZE != 0)
+                goto on_error;
+        }
+
+        usize newsz = phdr.p_vaddr + phdr.p_memsz;
+        for (usize va = round_up(sz, PAGE_SIZE); va < newsz; va += PAGE_SIZE) {
+            auto p = kalloc_page();
+            *get_pte(&this->pgdir, va, true) = K2P(p) | PTE_USER_DATA;
+        }
+        sz = newsz;
+
+        attach_pgdir(&this->pgdir);
+
+        inodes.read(ip, (u8 *)phdr.p_vaddr, phdr.p_offset, phdr.p_filesz);
+
+        memset((void *)phdr.p_vaddr + phdr.p_filesz, 0,
+               phdr.p_memsz - phdr.p_filesz);
     }
 
-    this->ucontext->x[0] = 0;
+    inodes.unlock(ip);
+    bcache.end_op(&ctx);
+
+    printk("%s:%d 0x%llx\n", __FILE__, __LINE__, this->ucontext->elr);
+
+    return 0;
 
 on_error:
+    printk("%s:%d\n", __FILE__, __LINE__);
     return -1;
 }
