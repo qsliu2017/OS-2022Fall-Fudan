@@ -37,7 +37,7 @@ bool user_writeable(const void *start, usize size) {
     // TODO
     UNUSE(start);
     UNUSE(size);
-    return false;
+    return true;
 }
 
 // get the length of a string including tailing '\0' in the memory space of

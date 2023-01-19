@@ -1,16 +1,17 @@
-#include "common/defines.h"
-#include "common/list.h"
-#include "common/rbtree.h"
-#include "common/rc.h"
-#include "common/sem.h"
-#include "common/spinlock.h"
-#include "fs/cache.h"
-#include "fs/defines.h"
+#include <common/defines.h>
+#include <common/list.h>
+#include <common/rbtree.h>
+#include <common/rc.h>
+#include <common/sem.h>
+#include <common/spinlock.h>
 #include <common/string.h>
+#include <fs/cache.h>
+#include <fs/defines.h>
 #include <fs/inode.h>
 #include <kernel/console.h>
 #include <kernel/mem.h>
 #include <kernel/printk.h>
+#include <kernel/sched.h>
 #include <sys/stat.h>
 
 // this lock mainly prevents concurrent access to inode list `head`, reference
@@ -76,9 +77,10 @@ void init_inodes(const SuperBlock *_sblock, const BlockCache *_cache) {
         cache->release(block);
     }
 
-    if (ROOT_INODE_NO < sblock->num_inodes)
+    if (ROOT_INODE_NO < sblock->num_inodes) {
         inodes.root = inodes.get(ROOT_INODE_NO);
-    else
+        inodes.share(inodes.root);
+    } else
         printk("(warn) init_inodes: no root inode.\n");
 }
 
@@ -397,19 +399,39 @@ static const char *skipelem(const char *path, char *name) {
  */
 static Inode *namex(const char *path, int nameiparent, char *name,
                     OpContext *ctx) {
-    UNUSE(ctx);
-    Inode *current = inodes.root;
+    Inode *ip, *next;
+    if (*path == '/')
+        ip = inodes.share(inodes.root);
+    else
+        ip = inodes.share(thisproc()->cwd);
+
     while ((path = skipelem(path, name)) != 0) {
-        if (nameiparent != 0 && strncmp(path, "", 2) == 0) {
-            break;
-        }
-        usize inode_no = inodes.lookup(current, name, NULL);
-        if (inode_no == 0) {
+        inodes.lock(ip);
+        if (ip->entry.type != INODE_DIRECTORY) {
+            inodes.unlock(ip);
+            inodes.put(ctx, ip);
             return 0;
         }
-        current = inodes.get(inode_no);
+        if (nameiparent && *path == '\0') {
+            inodes.unlock(ip);
+            return ip;
+        }
+        usize ino;
+        if (!(ino = inodes.lookup(ip, name, 0))) {
+            inodes.unlock(ip);
+            inodes.put(ctx, ip);
+            return 0;
+        }
+        next = inodes.get(ino);
+        inodes.unlock(ip);
+        inodes.put(ctx, ip);
+        ip = next;
     }
-    return current;
+    if (nameiparent) {
+        inodes.put(ctx, ip);
+        return 0;
+    }
+    return ip;
 }
 
 Inode *namei(const char *path, OpContext *ctx) {

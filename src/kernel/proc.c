@@ -60,6 +60,7 @@ struct proc *create_proc() {
     init_oftable(&p->oftable);
     p->parent = NULL;
     p->container = &root_container;
+    p->cwd = inodes.root;
 
     return p;
 }

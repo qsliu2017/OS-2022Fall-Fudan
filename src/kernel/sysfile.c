@@ -275,8 +275,15 @@ Inode *create(const char *path, short type, short major, short minor,
         return 0;
     auto inode_no = inodes.alloc(ctx, type);
     auto inode = inodes.get(inode_no);
+    inodes.lock(inode);
+
+    inodes.lock(pinode);
+    inodes.insert(ctx, pinode, name, inode_no);
+    inodes.unlock(pinode);
+
     inode->entry.major = major;
     inode->entry.minor = minor;
+    inode->entry.num_links = 1;
     inodes.sync(ctx, inode, true);
     return inode;
 }

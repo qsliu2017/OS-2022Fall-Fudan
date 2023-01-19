@@ -59,8 +59,8 @@ isize console_read(Inode *ip, char *dst, isize n) {
     return i;
 }
 
-void console_intr(char (*getc)()) {
-    char c = getc();
+void console_intr() {
+    char c = uart_get_char();
     switch (c) {
     case BACKSPACE:
         if (input.w < input.e) {
@@ -78,6 +78,7 @@ void console_intr(char (*getc)()) {
         exit(-1);
         break;
     case C('D'): /* EOF */
+    case '\n':
         if (input.e - input.r < INPUT_BUF) {
             console_putc(0);
             *chptr(input.e++) = 0;
