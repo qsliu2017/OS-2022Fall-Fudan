@@ -14,6 +14,7 @@
 static struct ftable ftable;
 
 void init_ftable() {
+    init_spinlock(&ftable.lock);
     for (int i = 0; i < NFILE; i++) {
         File *f = &ftable.file[i];
         f->type = FD_NONE;
@@ -28,8 +29,19 @@ void init_oftable(struct oftable *oftable) {
     }
 }
 
+void clean_oftable(struct oftable *oftable) {
+    _acquire_spinlock(&oftable->lock); // never release
+    for (int i = 0; i < NR_OPEN_DEFAULT; i++) {
+        File *f;
+        if ((f = oftable->file[i])) {
+            fileclose(f);
+        }
+    }
+}
+
 /* Allocate a file structure. */
 struct file *filealloc() {
+    raii_acquire_spinlock(&ftable.lock, 0);
     File *f = NULL;
     for (File *it = ftable.file; it < ftable.file + NFILE; it++) {
         if (it->ref == 0) {
@@ -43,12 +55,14 @@ struct file *filealloc() {
 
 /* Increment ref count for file f. */
 struct file *filedup(struct file *f) {
+    raii_acquire_spinlock(&ftable.lock, 0);
     f->ref++;
     return f;
 }
 
 /* Close file f. (Decrement ref count, close when reaches 0.) */
 void fileclose(struct file *f) {
+    raii_acquire_spinlock(&ftable.lock, 0);
     if (--f->ref > 0) {
         return;
     }
@@ -75,6 +89,7 @@ int filestat(struct file *f, struct stat *st) {
 
 /* Read from file f. */
 isize fileread(struct file *f, char *addr, isize n) {
+    raii_acquire_spinlock(&ftable.lock, 0);
     usize cnt = inodes.read(f->ip, (void *)addr, f->off, n);
     f->off += cnt;
     return cnt;
@@ -82,6 +97,7 @@ isize fileread(struct file *f, char *addr, isize n) {
 
 /* Write to file f. */
 isize filewrite(struct file *f, char *addr, isize n) {
+    raii_acquire_spinlock(&ftable.lock, 0);
     OpContext ctx;
     bcache.begin_op(&ctx);
     usize cnt = inodes.write(&ctx, f->ip, (void *)addr, f->off, n);

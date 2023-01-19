@@ -6,6 +6,7 @@
 
 #include <fcntl.h>
 
+#include "fs/cache.h"
 #include "syscall.h"
 #include <aarch64/mmu.h>
 #include <common/defines.h>
@@ -30,9 +31,11 @@ struct iovec {
 // get the file object by fd
 // return null if the fd is invalid
 static struct file *fd2file(int fd) {
-    // TODO
-    UNUSE(fd);
-    return 0;
+    if (fd < 0 || fd >= NR_OPEN_DEFAULT)
+        return 0;
+    auto oftable = &thisproc()->oftable;
+    raii_acquire_spinlock(&oftable->lock, 0);
+    return oftable->file[fd];
 }
 
 /*
@@ -40,8 +43,15 @@ static struct file *fd2file(int fd) {
  * Takes over file reference from caller on success.
  */
 int fdalloc(struct file *f) {
-    /* TODO: Lab10 Shell */
-    UNUSE(f);
+    auto oftable = &thisproc()->oftable;
+    raii_acquire_spinlock(&oftable->lock, 0);
+    int fd;
+    for (fd = 0; fd < NR_OPEN_DEFAULT; fd++) {
+        if (!oftable->file[fd]) {
+            oftable->file[fd] = f;
+            return fd;
+        }
+    }
     return -1;
 }
 
@@ -126,8 +136,13 @@ define_syscall(writev, int fd, struct iovec *iov, int iovcnt) {
  * Clear this fd of this process.
  */
 define_syscall(close, int fd) {
-    /* TODO: Lab10 Shell */
-    UNUSE(fd);
+    File *f = fd2file(fd);
+    if (!f)
+        return -1;
+    auto oftable = &thisproc()->oftable;
+    raii_acquire_spinlock(&oftable->lock, 0);
+    oftable->file[fd] = NULL;
+    fileclose(f);
     return 0;
 }
 
@@ -254,13 +269,16 @@ bad:
  */
 Inode *create(const char *path, short type, short major, short minor,
               OpContext *ctx) {
-    /* TODO: Lab10 Shell */
-    UNUSE(path);
-    UNUSE(type);
-    UNUSE(major);
-    UNUSE(minor);
-    UNUSE(ctx);
-    return 0;
+    char name[FILE_NAME_MAX_LENGTH];
+    auto pinode = nameiparent(path, name, ctx);
+    if (!pinode)
+        return 0;
+    auto inode_no = inodes.alloc(ctx, type);
+    auto inode = inodes.get(inode_no);
+    inode->entry.major = major;
+    inode->entry.minor = minor;
+    inodes.sync(ctx, inode, true);
+    return inode;
 }
 
 define_syscall(openat, int dirfd, const char *path, int omode) {
@@ -358,12 +376,14 @@ define_syscall(mknodat, int dirfd, const char *path, int major, int minor) {
 }
 
 define_syscall(chdir, const char *path) {
-    // TODO
-    // change the cwd (current working dictionary) of current process to 'path'
-    // you may need to do some validations
-
-    UNUSE(path);
-    return -1;
+    OpContext ctx;
+    bcache.begin_op(&ctx);
+    auto inode = namei(path, &ctx);
+    bcache.end_op(&ctx);
+    if (!inode)
+        return -1;
+    thisproc()->cwd = inode;
+    return 0;
 }
 
 define_syscall(pipe2, int *fd, int flags) {

@@ -9,8 +9,6 @@
 #include <fs/inode.h>
 #include <sys/stat.h>
 
-#define NFILE 65536 // Open files per system
-
 typedef struct file {
     enum { FD_NONE, FD_PIPE, FD_INODE } type;
     int ref;
@@ -21,9 +19,10 @@ typedef struct file {
     usize off;
 } File;
 
+#define NFILE 65536 // Open files per system
 struct ftable {
+    SpinLock lock;
     File file[NFILE];
-    // TODO: table of file objects in the system
 };
 
 #define NR_OPEN_DEFAULT 64
@@ -34,6 +33,7 @@ struct oftable {
 
 void init_ftable();
 void init_oftable(struct oftable *);
+void clean_oftable(struct oftable *);
 
 /*
  * Iterate the file table to get a file structure with ref == 0.

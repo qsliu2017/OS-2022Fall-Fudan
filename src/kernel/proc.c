@@ -2,6 +2,7 @@
 #include <common/list.h>
 #include <common/rbtree.h>
 #include <common/string.h>
+#include <fs/file.h>
 #include <kernel/container.h>
 #include <kernel/init.h>
 #include <kernel/mem.h>
@@ -56,6 +57,7 @@ struct proc *create_proc() {
 
     p->killed = false;
     init_sem(&p->childexit, 0);
+    init_oftable(&p->oftable);
     p->parent = NULL;
     p->container = &root_container;
 
@@ -162,6 +164,7 @@ int wait(int *exitcode, int *pid) {
     _rb_erase(&child->node, &this->exit_root);
     *exitcode = child->exitcode;
     free_pgdir(&child->pgdir);
+    clean_oftable(&child->oftable);
     *pid = get_pid(child);
     free_localpid(child->container, child->localpid);
 
