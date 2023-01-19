@@ -7,21 +7,23 @@
 
 .globl swtch
 swtch:
-// TODO
-  pushp(x29, x30)
-  pushp(x27, x28)
-  pushp(x25, x26)
-  pushp(x23, x24)
-  pushp(x21, x22)
-  pushp(x19, x20)
-  mov x29, sp
-  str x29, [x1]
+  pushp(x19, xzr)
+  pushp(x21, x20)
+  pushp(x23, x22)
+  pushp(x25, x24)
+  pushp(x27, x26)
+  pushp(x29, x28)
+  pushp(x30, x30)
+  mov x15, sp
+  str x15, [x1]
 
   mov sp, x0
-  popp(x19, x20)
-  popp(x21, x22)
-  popp(x23, x24)
-  popp(x25, x26)
-  popp(x27, x28)
-  popp(x29, x30)
-  ret
+  popp(x15, x30)
+  popp(x29, x28)
+  popp(x27, x26)
+  popp(x25, x24)
+  popp(x23, x22)
+  popp(x21, x20)
+  popp(x19, xzr)
+
+  ret x15

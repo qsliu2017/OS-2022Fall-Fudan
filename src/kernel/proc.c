@@ -67,14 +67,15 @@ void set_parent_to_this(struct proc *proc) {
     ASSERT(!_rb_insert(&proc->node, &this->child_root, __proc_cmp));
 }
 
-void proc_entry() {
-    asm("bl _release_sched_lock\n"
-        "mov x30, x19\n"
-        "mov x0, x20\n"
-        "mov x1, x21\n");
+static void fork_return() {
+    _release_sched_lock();
+    return;
 }
 
+extern void trap_return();
+
 int start_proc(struct proc *p, void (*entry)(u64), u64 arg) {
+    UNUSE(arg);
     raii_acquire_spinlock(&proc_lock, start_proc);
 
     if (!p->parent) {
@@ -89,10 +90,9 @@ int start_proc(struct proc *p, void (*entry)(u64), u64 arg) {
     // setup the kcontext to make the proc start with proc_entry(entry, arg)
     ASSERT(p->kstack != NULL);
     ASSERT(p->kcontext != NULL);
-    p->kcontext->x19 = (u64)entry;
-    p->kcontext->x20 = arg;
-    p->kcontext->x29 = (u64)p->kcontext;
-    p->kcontext->x30 = (u64)proc_entry;
+    p->kcontext->lr0 = (u64)fork_return;
+    p->kcontext->lr = (u64)entry;
+    p->kcontext->fp = (u64)p->kcontext;
 
     p->localpid = alloc_localpid(p->container);
 
@@ -216,7 +216,7 @@ int fork() {
 
     init_schinfo(&child->schinfo, false);
 
-    child->ucontext->x0 = 0;
+    child->ucontext->x[0] = 0;
     child->container = parent->container;
     child->localpid = alloc_localpid(parent->container);
     activate_proc(child);

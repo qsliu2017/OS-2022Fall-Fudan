@@ -83,7 +83,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
         mmap(pd, phdr.p_vaddr, fp, phdr.p_offset, phdr.p_filesz, flags);
     }
 
-    this->ucontext->x0 = 0;
+    this->ucontext->x[0] = 0;
 
 on_error:
     return -1;
