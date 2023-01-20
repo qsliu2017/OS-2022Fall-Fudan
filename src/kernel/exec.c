@@ -22,6 +22,8 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
     OpContext ctx;
     bcache.begin_op(&ctx);
     Inode *ip = namei(path, &ctx);
+    if (!ip)
+        goto on_error;
     inodes.lock(ip);
 
     struct proc *this = thisproc();
@@ -29,7 +31,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
     PTEntriesPtr oldpt = this->pgdir.pt;
     this->pgdir.pt = _init_pt();
 
-    usize sp = 0x0001000000000000; /* Top address of user space. */
+    usize sp = 0x0001000000000000 /* Top address of user space. */ - PAGE_SIZE;
     int argc = 0;
     if (argv) {
         for (; argv[argc]; argc++) {
@@ -47,10 +49,16 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
         }
     }
 
-    usize newenvp = round_down(sp - sizeof(void *) * (envc + 1), 16);
-    usize newargv = round_down(newenvp - sizeof(void *) * (argc + 1), 16);
+    usize newsp =
+        round_down(sp - sizeof(void *) * (envc + 1)  /* envp pointers */
+                       - sizeof(void *) * (argc + 1) /* argv pointers */
+                       - 8                           /* argc */
+                   ,
+                   16);
+    usize newargv = newsp + 8;
+    usize newenvp = newargv + sizeof(void *) * (argc + 1);
 
-    copyout(&this->pgdir, (u8 *)newargv, get_zero_page(), sp - newargv);
+    copyout(&this->pgdir, (u8 *)newsp, get_zero_page(), 0);
 
     attach_pgdir(&this->pgdir);
     _free_pgdir(oldpt);
@@ -66,15 +74,13 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
             ;
     }
 
-    sp = newargv;
+    sp = newsp;
+    *(isize *)sp = argc;
 
     Elf64_Ehdr ehdr;
     if (inodes.read(ip, (u8 *)&ehdr, 0, sizeof(ehdr)) != sizeof(ehdr))
         goto on_error;
 
-    this->ucontext->x[0] = argc;
-    this->ucontext->x[1] = (u64)newargv;
-    this->ucontext->x[2] = (u64)newenvp;
     this->ucontext->elr = ehdr.e_entry;
     this->ucontext->sp = sp;
 
@@ -130,8 +136,6 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 
     inodes.unlock(ip);
     bcache.end_op(&ctx);
-
-    printk("%s:%d 0x%llx\n", __FILE__, __LINE__, this->ucontext->elr);
 
     return 0;
 

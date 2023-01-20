@@ -127,15 +127,19 @@ int copyout(struct pgdir *pd, void *va, void *p, usize len) {
     u64 n = 0;
     for (u64 a = round_down((u64)va, PAGE_SIZE); a < (u64)va + len;
          a += PAGE_SIZE) {
-        void *page;
-        if (!(page = get_pte(pd, a, false))) {
-            page = kalloc_page();
-            kref_page(page);
-            *get_pte(pd, a, true) = K2P(page) | PTE_USER_DATA;
+        auto pte = get_pte(pd, a, true);
+        u64 pa = *pte;
+        if (!pa) {
+            pa = (u64)kalloc_page();
+            kref_page((void *)pa);
+            *pte = K2P(pa) | PTE_USER_DATA;
+        } else {
+            pa = KSPACE(PTE_ADDRESS(pa));
         }
-        u64 _n = a + PAGE_SIZE - ((u64)va + n);
-        memcpy(page + ((u64)va + n) % PAGE_SIZE, p + n, _n);
-        n += _n;
+        pa += ((u64)va + n) % PAGE_SIZE;
+        u64 i = MIN(PAGE_SIZE - pa % PAGE_SIZE, len - n);
+        memcpy((void *)pa, p + n, i);
+        n += i;
     }
     return n;
 }
