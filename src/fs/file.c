@@ -48,6 +48,7 @@ struct file *filealloc() {
             f = it;
             f->ref++;
             f->off = 0;
+            break;
         }
     }
     return f;

@@ -48,7 +48,7 @@ int fdalloc(struct file *f) {
     int fd;
     for (fd = 0; fd < NR_OPEN_DEFAULT; fd++) {
         if (!oftable->file[fd]) {
-            oftable->file[fd] = f;
+            oftable->file[fd] = filedup(f);
             return fd;
         }
     }
