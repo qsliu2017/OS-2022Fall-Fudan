@@ -395,11 +395,10 @@ define_syscall(chdir, const char *path) {
 
 define_syscall(pipe2, int *fd, int flags) {
     File *f0, *f1;
-    if (pipeAlloc(&f0, &f1)) {
+    if (pipeAlloc(&f0, &f1))
         return -1;
-    }
-    /* TODO: file2fd and place in fd */
-    UNUSE(fd);
+    fd[0] = (u64)f0;
+    fd[1] = (u64)f1;
     UNUSE(flags);
     return 0;
 }

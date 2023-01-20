@@ -1,3 +1,5 @@
+#include <aarch64/mmu.h>
+#include <common/defines.h>
 #include <common/sem.h>
 #include <kernel/printk.h>
 #include <kernel/sched.h>
@@ -10,7 +12,6 @@ void *syscall_table[NR_SYSCALL];
 typedef u64 syscall_func_t(u64, u64, u64, u64, u64, u64);
 
 void syscall_entry(UserContext *context) {
-    // TODO
     // Invoke syscall_table[id] with args and set the return value.
     // id is stored in x8. args are stored in x0-x5. return value is stored in
     // x0.
@@ -25,18 +26,24 @@ void syscall_entry(UserContext *context) {
 // check if the virtual address [start,start+size) is READABLE by the current
 // user process
 bool user_readable(const void *start, usize size) {
-    // TODO
-    UNUSE(start);
-    UNUSE(size);
+    for (usize va = PAGE_BASE((u64)start); va < (u64)start + size;
+         va += PAGE_SIZE) {
+        auto pte = get_pte(&thisproc()->pgdir, va, false);
+        if (!pte)
+            return false;
+    }
     return true;
 }
 
 // check if the virtual address [start,start+size) is READABLE & WRITEABLE by
 // the current user process
 bool user_writeable(const void *start, usize size) {
-    // TODO
-    UNUSE(start);
-    UNUSE(size);
+    for (usize va = PAGE_BASE((u64)start); va < (u64)start + size;
+         va += PAGE_SIZE) {
+        auto pte = get_pte(&thisproc()->pgdir, va, false);
+        if (!pte || ((*pte) & PTE_RW) != PTE_RW)
+            return false;
+    }
     return true;
 }
 

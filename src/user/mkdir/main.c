@@ -6,6 +6,6 @@
 #include <unistd.h>
 
 int main(int argc, char *argv[]) {
-    // TODO
-    exit(0);
+    int ret = open(argv[1], O_WRONLY | O_CREAT | O_TRUNC, O_DIRECTORY);
+    exit(ret);
 }
